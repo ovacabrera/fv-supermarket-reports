@@ -698,6 +698,8 @@ export default function App() {
   const [calOpen, setCalOpen] = useState(false);
   const calRef = useRef(null);
   const fileRef = useRef(null);
+  const windowWidth = useWindowWidth();
+  const isDesktop = windowWidth >= 900;
 
   const ayer  = yesterday();
   const today = toYMD(new Date());
@@ -876,6 +878,147 @@ export default function App() {
     return `${a.getDate()} ${MESES_NOMBRE[a.getMonth()].slice(0,3)} → ${b.getDate()} ${MESES_NOMBRE[b.getMonth()].slice(0,3)}`;
   },[dateFrom,dateTo]);
 
+  const filtrosUI = (
+    <div
+      style={{
+        background: C.surface,
+        borderRadius: 14,
+        border: `1px solid ${C.border}`,
+        padding: isDesktop ? "16px 14px" : "16px 14px",
+        marginBottom: isDesktop ? 0 : 14,
+      }}
+    >
+      <Lbl>Período</Lbl>
+      <div ref={calRef} style={{ position: "relative", marginBottom: 12 }}>
+        <button
+          onClick={() => setCalOpen((o) => !o)}
+          style={{
+            width: "100%",
+            background: C.surfaceAlt,
+            border: `1px solid ${calOpen ? C.accent : C.border}`,
+            color: C.text,
+            borderRadius: 8,
+            padding: "10px 14px",
+            fontSize: isDesktop ? 13 : 14,
+            textAlign: "left",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <span>📅 {rangeLabel}</span>
+          <span style={{ color: C.textMuted, fontSize: 12 }}>{calOpen ? "▲" : "▼"}</span>
+        </button>
+        {calOpen && (
+          <div
+            style={{
+              position: "absolute",
+              top: "calc(100% + 6px)",
+              left: 0,
+              right: 0,
+              zIndex: 100,
+              background: C.surface,
+              border: `1px solid ${C.border}`,
+              borderRadius: 12,
+              padding: "14px 16px",
+              boxShadow: "0 8px 32px #00000080",
+            }}
+          >
+            <RangeCalendar
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              onChange={(a, b) => {
+                setDateFrom(a);
+                setDateTo(b);
+              }}
+            />
+            <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+              <SmallBtn
+                onClick={() => {
+                  const t = toYMD(new Date());
+                  setDateFrom(t);
+                  setDateTo(t);
+                }}
+              >
+                Hoy
+              </SmallBtn>
+              <SmallBtn
+                onClick={() => {
+                  const a = new Date();
+                  a.setDate(a.getDate() - 6);
+                  setDateFrom(toYMD(a));
+                  setDateTo(toYMD(new Date()));
+                }}
+              >
+                Últimos 7 días
+              </SmallBtn>
+              <SmallBtn
+                onClick={() => {
+                  const n = new Date();
+                  setDateFrom(toYMD(new Date(n.getFullYear(), n.getMonth(), 1)));
+                  setDateTo(toYMD(new Date(n.getFullYear(), n.getMonth() + 1, 0)));
+                }}
+              >
+                Este mes
+              </SmallBtn>
+              <SmallBtn onClick={() => setCalOpen(false)} accent>
+                Listo ✓
+              </SmallBtn>
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+        <div>
+          <Lbl>Hora desde</Lbl>
+          <input
+            type="time"
+            value={timeFrom}
+            onChange={(e) => setTimeFrom(e.target.value)}
+            style={{ fontSize: 12, padding: "6px 8px" }}
+          />
+        </div>
+        <div>
+          <Lbl>Hora hasta</Lbl>
+          <input
+            type="time"
+            value={timeTo}
+            onChange={(e) => setTimeTo(e.target.value)}
+            style={{ fontSize: 12, padding: "6px 8px" }}
+          />
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Btn
+          onClick={() => {
+            setDateFrom(today);
+            setDateTo(today);
+            setTimeFrom("00:00");
+            setTimeTo("23:59");
+          }}
+        >
+          Hoy completo
+        </Btn>
+        <Btn
+          onClick={() => {
+            setTimeFrom("00:00");
+            setTimeTo("16:00");
+          }}
+        >
+          🌅 Mañana
+        </Btn>
+        <Btn
+          onClick={() => {
+            setTimeFrom("16:00");
+            setTimeTo("23:59");
+          }}
+        >
+          🌆 Tarde
+        </Btn>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
       <style>{`
@@ -889,11 +1032,27 @@ export default function App() {
       `}</style>
 
       {/* Header */}
-      <div style={{borderBottom:`1px solid ${C.border}`,padding:"14px 18px",display:"flex",alignItems:"center",gap:10,background:C.surface}}>
+      <div
+        style={{
+          borderBottom: `1px solid ${C.border}`,
+          padding: isDesktop ? "10px 20px" : "12px 14px",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          background: C.surface,
+          position: "sticky",
+          top: 0,
+          zIndex: 200,
+          flexWrap: "wrap",
+        }}
+      >
         <div style={{width:32,height:32,borderRadius:7,background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>🛒</div>
-        <div><div style={{fontWeight:700,fontSize:16}}>Panel de Ventas</div><div style={{fontSize:11,color:C.textMuted}}>FácilVirtual · HSQLDB</div></div>
+        <div style={{ flexShrink: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: isDesktop ? 17 : 16 }}>Panel de Ventas</div>
+          <div style={{ fontSize: 11, color: C.textMuted }}>FácilVirtual · HSQLDB</div>
+        </div>
         {db && (
-          <div style={{ marginLeft: "auto" }}>
+          <div style={{ marginLeft: "auto", flex: 1, minWidth: 0 }}>
             {autoMode ? (
               <DBStatusBanner dbInfo={dbInfo} onManualLoad={() => fileRef.current?.click()} />
             ) : (
@@ -914,10 +1073,34 @@ export default function App() {
             )}
           </div>
         )}
+
+        {/* Tabs desktop */}
+        {db && isDesktop && (
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            {[["ventas", "📊 Ventas"], ["historico", "📈 Histórico IPC"]].map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setTab(id)}
+                style={{
+                  padding: "7px 16px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  background: tab === id ? C.accent : "none",
+                  border: `1px solid ${tab === id ? C.accent : C.border}`,
+                  color: tab === id ? "#000" : C.textMuted,
+                  borderRadius: 8,
+                  transition: "all 0.15s",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
-      {db && (
+      {db && !isDesktop && (
         <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.surface}}>
           {[["ventas","📊 Ventas"],["historico","📈 Histórico IPC"]].map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id)} style={{
@@ -931,7 +1114,13 @@ export default function App() {
         </div>
       )}
 
-      <div style={{padding:"16px 14px",maxWidth:680,margin:"0 auto"}}>
+      <div
+        style={{
+          padding: isDesktop ? "16px 20px" : "16px 14px",
+          maxWidth: isDesktop ? 1180 : 680,
+          margin: "0 auto",
+        }}
+      >
 
         {/* Input file oculto para carga manual */}
         <input
@@ -994,174 +1183,421 @@ export default function App() {
         {/* ── PESTAÑA VENTAS ── */}
         {db && tab==="ventas" && (
           <>
-            <div style={{background:C.surface,borderRadius:14,border:`1px solid ${C.border}`,padding:"16px 14px",marginBottom:14}}>
-              <Lbl>Período</Lbl>
-              <div ref={calRef} style={{position:"relative",marginBottom:12}}>
-                <button onClick={()=>setCalOpen(o=>!o)} style={{width:"100%",background:C.surfaceAlt,border:`1px solid ${calOpen?C.accent:C.border}`,color:C.text,borderRadius:8,padding:"10px 14px",fontSize:14,textAlign:"left",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span>📅 {rangeLabel}</span><span style={{color:C.textMuted,fontSize:12}}>{calOpen?"▲":"▼"}</span>
-                </button>
-                {calOpen && (
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,right:0,zIndex:100,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",boxShadow:"0 8px 32px #00000080"}}>
-                    <RangeCalendar dateFrom={dateFrom} dateTo={dateTo} onChange={(a,b)=>{setDateFrom(a);setDateTo(b);}}/>
-                    <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
-                      <SmallBtn onClick={()=>{const t=toYMD(new Date());setDateFrom(t);setDateTo(t);}}>Hoy</SmallBtn>
-                      <SmallBtn onClick={()=>{const a=new Date();a.setDate(a.getDate()-6);setDateFrom(toYMD(a));setDateTo(toYMD(new Date()));}}>Últimos 7 días</SmallBtn>
-                      <SmallBtn onClick={()=>{const n=new Date();setDateFrom(toYMD(new Date(n.getFullYear(),n.getMonth(),1)));setDateTo(toYMD(new Date(n.getFullYear(),n.getMonth()+1,0)));}}>Este mes</SmallBtn>
-                      <SmallBtn onClick={()=>setCalOpen(false)} accent>Listo ✓</SmallBtn>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                <div><Lbl>Hora desde</Lbl><input type="time" value={timeFrom} onChange={e=>setTimeFrom(e.target.value)} style={{fontSize:12,padding:"6px 8px"}}/></div>
-                <div><Lbl>Hora hasta</Lbl><input type="time" value={timeTo}   onChange={e=>setTimeTo(e.target.value)}   style={{fontSize:12,padding:"6px 8px"}}/></div>
-              </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <Btn onClick={()=>{setDateFrom(today);setDateTo(today);setTimeFrom("00:00");setTimeTo("23:59");}}>Hoy completo</Btn>
-                <Btn onClick={()=>{setTimeFrom("00:00");setTimeTo("16:00");}}>🌅 Mañana</Btn>
-                <Btn onClick={()=>{setTimeFrom("16:00");setTimeTo("23:59");}}>🌆 Tarde</Btn>
-              </div>
-            </div>
-
-            {filtered&&filtered.length===0 && (
-              <div style={{textAlign:"center",padding:50,color:C.textMuted,background:C.surface,borderRadius:14,border:`1px solid ${C.border}`}}>
-                <div style={{fontSize:26,marginBottom:8}}>🔍</div>Sin ventas en el período seleccionado
-              </div>
-            )}
-
-            {metrics&&filtered.length>0 && (
-              <>
-                <div style={{background:`linear-gradient(135deg,${C.surface} 0%,#1a2240 100%)`,borderRadius:14,border:`1px solid ${C.border}`,padding:"22px 18px",marginBottom:14}}>
-                  <div style={{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:2,marginBottom:6}}>Venta Total</div>
-                  <div style={{fontSize:"clamp(28px,8vw,48px)",fontWeight:700,color:C.accent,letterSpacing:"-1px",lineHeight:1.1,fontFamily:"'DM Mono',monospace"}}>{ars(metrics.totalVentas)}</div>
-                  <div style={{display:"flex",gap:20,marginTop:14,flexWrap:"wrap"}}>
-                    <MiniStat label="Operaciones" value={metrics.cantOps.toLocaleString("es-AR")} color={C.blue}/>
-                    <MiniStat label="Ticket prom." value={ars(metrics.ticketProm)} color={C.green}/>
-                    <MiniStat label="Unidades" value={metrics.totalUnidades.toLocaleString("es-AR")} color={C.purple}/>
-                  </div>
-                </div>
-
-                <Card title={metrics.singleDay?"Ventas por hora":"Ventas por día"}>
-                  {metrics.timeData.length===0?<NoData/>:(
-                    <ResponsiveContainer width="100%" height={220}>
-                      <BarChart data={metrics.timeData} barSize={metrics.timeData.length>14?10:18}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
-                        <XAxis dataKey="label" tick={{fill:C.textMuted,fontSize:10}} axisLine={false} tickLine={false}/>
-                        <YAxis tick={{fill:C.textMuted,fontSize:10}} axisLine={false} tickLine={false} tickFormatter={arsShort}/>
-                        <Tooltip contentStyle={{background:C.surfaceAlt,border:`1px solid ${C.border}`,borderRadius:8}} labelStyle={{color:C.text,fontWeight:700}} formatter={v=>[ars(v),"Ventas"]}/>
-                        <Bar dataKey="ventas" fill={C.accent} radius={[4,4,0,0]}/>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </Card>
-
-                {/* ── NUEVO: Histograma de distribución de tickets ── */}
-                {filtered.length >= 5 && (
-                  <Card title="Distribución de tickets">
-                    <HistogramaTickets filtered={filtered} ticketProm={metrics.ticketProm}/>
-                  </Card>
-                )}
-
-                <Card title="Ventas por cajero">
-                  {metrics.empData.length===0?<NoData/>:(
-                    <ResponsiveContainer width="100%" height={260}>
-                      <PieChart>
-                        <Pie data={metrics.empData} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} innerRadius={36} paddingAngle={2} labelLine={false} label={PieLabel}>
-                          {metrics.empData.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                        </Pie>
-                        <Tooltip contentStyle={{background:C.surfaceAlt,border:`1px solid ${C.border}`,borderRadius:8}} formatter={v=>[ars(v),"Ventas"]}/>
-                        <Legend formatter={v=><span style={{color:C.text,fontSize:12}}>{v}</span>}/>
-                      </PieChart>
-                    </ResponsiveContainer>
-                  )}
-                </Card>
-
-                <Card title="Ventas por rubro">
-                  {metrics.catData.length===0?<NoData/>:(
-                    <ResponsiveContainer width="100%" height={Math.max(220,metrics.catData.length*30+40)}>
-                      <BarChart data={metrics.catData} layout="vertical" barSize={15} margin={{right:60}}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false}/>
-                        <XAxis type="number" tick={{fill:C.textMuted,fontSize:10}} axisLine={false} tickLine={false} tickFormatter={arsShort}/>
-                        <YAxis type="category" dataKey="name" tick={{fill:C.textMuted,fontSize:11}} axisLine={false} tickLine={false} width={108}/>
-                        <Tooltip contentStyle={{background:C.surfaceAlt,border:`1px solid ${C.border}`,borderRadius:8}} formatter={v=>[ars(v),"Ventas"]}/>
-                        <Bar dataKey="value" radius={[0,4,4,0]} label={<BarLabelRight/>}>
-                          {metrics.catData.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </Card>
-
-                <Card title="🎯 Candidatos para 3x2 · frecuentes con ticket bajo">
-                  <TopFrecuentesBaratos data={metrics.top5FrecuentesBaratos} mediana={metrics.mediana}/>
-                </Card>
-
-                <Card title="Top 5 artículos más vendidos">
-                  {!metrics.top5?.length ? <NoData/> : (
-                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      {metrics.top5.map((p,i)=>{
-                        const maxQty = metrics.top5[0].qty;
-                        const pct = maxQty > 0 ? (p.qty/maxQty)*100 : 0;
-                        return (
-                          <div key={i}>
-                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
-                              <div style={{fontSize:12,color:C.text,fontWeight:500,flex:1,marginRight:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                                <span style={{color:C.textMuted,marginRight:6,fontSize:11}}>#{i+1}</span>{p.name}
-                              </div>
-                              <div style={{display:"flex",gap:10,flexShrink:0}}>
-                                <span style={{fontSize:13,fontWeight:700,color:C.accent,fontFamily:"'DM Mono',monospace"}}>{Math.round(p.qty).toLocaleString("es-AR")} u.</span>
-                                <span style={{fontSize:12,color:C.textMuted,fontFamily:"'DM Mono',monospace"}}>{arsShort(p.total)}</span>
-                              </div>
-                            </div>
-                            <div style={{height:4,borderRadius:2,background:C.border}}>
-                              <div style={{height:"100%",borderRadius:2,width:`${pct}%`,background:COLORS[i],transition:"width 0.4s ease"}}/>
-                            </div>
-                          </div>
-                        );
-                      })}
+            {isDesktop ? (
+              <div style={{ display: "grid", gridTemplateColumns: "290px 1fr", gap: 14, alignItems: "start" }}>
+                <div>{filtrosUI}</div>
+                <div>
+                  {filtered && filtered.length === 0 && (
+                    <div
+                      style={{
+                        textAlign: "center",
+                        padding: 50,
+                        color: C.textMuted,
+                        background: C.surface,
+                        borderRadius: 14,
+                        border: `1px solid ${C.border}`,
+                      }}
+                    >
+                      <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>Sin ventas en el período seleccionado
                     </div>
                   )}
-                </Card>
 
-                {/* Resumen 3 meses anteriores */}
-                {historico && (
-                  <Card title="Resumen meses anteriores">
-                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                      {historico.map((m,i)=>(
-                        <div key={i} style={{background:C.surfaceAlt,borderRadius:10,padding:"14px 16px",border:`1px solid ${C.border}`}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:m.pico?8:0}}>
-                            <div style={{fontSize:14,color:C.textMuted,fontWeight:500}}>{m.nombre}</div>
-                            <div style={{display:"flex",alignItems:"center",gap:6}}>
-                              <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:"'DM Mono',monospace"}}>{ars(m.total)}</div>
-                              {m.variacion!=null && (
-                                <div style={{display:"flex",alignItems:"center",gap:2,fontSize:11,fontWeight:700,color:m.variacion>=0?C.green:C.red,background:m.variacion>=0?"#3ecf8e18":"#ff6b6b18",padding:"2px 7px",borderRadius:12}}>
-                                  <span>{m.variacion>=0?"↑":"↓"}</span>
-                                  <span>{Math.abs(m.variacion).toFixed(1)}%</span>
-                                </div>
-                              )}
-                              {m.ipc!=null && (
-                                <div style={{display:"flex",alignItems:"center",gap:2,fontSize:11,fontWeight:700,color:C.blue,background:"#4da6ff18",padding:"2px 7px",borderRadius:12}}>
-                                  <span>📊</span>
-                                  <span>{m.ipc.toFixed(1)}%</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          {m.pico && (
-                            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.accent,borderTop:`1px solid ${C.border}`,paddingTop:8,marginTop:8}}>
-                              <span>🏆</span>
-                              <span>Mejor día: <strong>día {m.pico.dia}, {m.pico.diaSemana}</strong> — {ars(m.pico.total)}</span>
-                            </div>
-                          )}
-                          <div style={{display:"flex",gap:14,marginTop:8,flexWrap:"wrap",borderTop:`1px solid ${C.border}`,paddingTop:8}}>
-                            <MiniStatSm label="Operaciones" value={m.cantOps.toLocaleString("es-AR")} color={C.blue}/>
-                            <MiniStatSm label="Ticket prom." value={ars(m.ticketProm)} color={C.green}/>
-                            <MiniStatSm label="Unidades" value={m.unidades.toLocaleString("es-AR")} color={C.purple}/>
-                          </div>
+                  {metrics && filtered.length > 0 && (
+                    <>
+                      <div
+                        style={{
+                          background: `linear-gradient(135deg,${C.surface} 0%,#1a2240 100%)`,
+                          borderRadius: 14,
+                          border: `1px solid ${C.border}`,
+                          padding: "20px 24px",
+                          marginBottom: 14,
+                        }}
+                      >
+                        <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 2, marginBottom: 6 }}>
+                          Venta Total
                         </div>
-                      ))}
+                        <div
+                          style={{
+                            fontSize: "clamp(28px,5vw,52px)",
+                            fontWeight: 700,
+                            color: C.accent,
+                            letterSpacing: "-1px",
+                            lineHeight: 1.1,
+                            fontFamily: "'DM Mono',monospace",
+                          }}
+                        >
+                          {ars(metrics.totalVentas)}
+                        </div>
+                        <div style={{ display: "flex", gap: 24, marginTop: 14, flexWrap: "wrap" }}>
+                          <MiniStat label="Operaciones" value={metrics.cantOps.toLocaleString("es-AR")} color={C.blue} />
+                          <MiniStat label="Ticket prom." value={ars(metrics.ticketProm)} color={C.green} />
+                          <MiniStat label="Unidades" value={metrics.totalUnidades.toLocaleString("es-AR")} color={C.purple} />
+                        </div>
+                      </div>
+
+                        <Card title="Ventas por rubro">
+                          {metrics.catData.length === 0 ? (
+                            <NoData />
+                          ) : (
+                            <ResponsiveContainer width="100%" height={Math.max(220, metrics.catData.length * 35 + 40)}>
+                              <BarChart data={metrics.catData} layout="vertical" barSize={12} margin={{ right: 60 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                                <XAxis type="number" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={arsShort} />
+                                <YAxis type="category" dataKey="name" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={95} />
+                                <Tooltip contentStyle={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8 }} formatter={(v) => [ars(v), "Ventas"]} />
+                                <Bar dataKey="value" radius={[0, 4, 4, 0]} label={<BarLabelRight />}>
+                                  {metrics.catData.map((_, i) => (
+                                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Card>
+
+                        <Card title={metrics.singleDay ? "Ventas por hora" : "Ventas por día"}>
+                          {metrics.timeData.length === 0 ? (
+                            <NoData />
+                          ) : (
+                            <ResponsiveContainer width="100%" height={220}>
+                              <BarChart data={metrics.timeData} barSize={metrics.timeData.length > 14 ? 10 : 18}>
+                                <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+                                <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                                <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={arsShort} />
+                                <Tooltip
+                                  contentStyle={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8 }}
+                                  labelStyle={{ color: C.text, fontWeight: 700 }}
+                                  formatter={(v) => [ars(v), "Ventas"]}
+                                />
+                                <Bar dataKey="ventas" fill={C.accent} radius={[4, 4, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Card>
+
+                        <Card title="Ventas por cajero">
+                          {metrics.empData.length === 0 ? (
+                            <NoData />
+                          ) : (
+                            <ResponsiveContainer width="100%" height={220}>
+                              <PieChart>
+                                <Pie
+                                  data={metrics.empData}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="45%"
+                                  outerRadius={80}
+                                  innerRadius={30}
+                                  paddingAngle={2}
+                                  labelLine={false}
+                                  label={PieLabel}
+                                >
+                                  {metrics.empData.map((_, i) => (
+                                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip contentStyle={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8 }} formatter={(v) => [ars(v), "Ventas"]} />
+                                <Legend formatter={(v) => <span style={{ color: C.text, fontSize: 11 }}>{v}</span>} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          )}
+                        </Card>
+                     
+
+                      {/* ── NUEVO: Histograma de distribución de tickets ── */}
+                      {filtered.length >= 5 && (
+                        <Card title="Distribución de tickets">
+                          <HistogramaTickets filtered={filtered} ticketProm={metrics.ticketProm} />
+                        </Card>
+                      )}
+
+
+                      <Card title="Top 5 artículos más vendidos">
+                        {!metrics.top5?.length ? (
+                          <NoData />
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {metrics.top5.map((p, i) => {
+                              const maxQty = metrics.top5[0].qty;
+                              const pct = maxQty > 0 ? (p.qty / maxQty) * 100 : 0;
+                              return (
+                                <div key={i}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                    <div
+                                      style={{
+                                        fontSize: 12,
+                                        color: C.text,
+                                        fontWeight: 500,
+                                        flex: 1,
+                                        marginRight: 8,
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      <span style={{ color: C.textMuted, marginRight: 6, fontSize: 11 }}>#{i + 1}</span>
+                                      {p.name}
+                                    </div>
+                                    <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+                                      <span style={{ fontSize: 13, fontWeight: 700, color: C.accent, fontFamily: "'DM Mono',monospace" }}>
+                                        {Math.round(p.qty).toLocaleString("es-AR")} u.
+                                      </span>
+                                      <span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{arsShort(p.total)}</span>
+                                    </div>
+                                  </div>
+                                  <div style={{ height: 4, borderRadius: 2, background: C.border }}>
+                                    <div style={{ height: "100%", borderRadius: 2, width: `${pct}%`, background: COLORS[i], transition: "width 0.4s ease" }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </Card>
+
+
+                      <Card title="🎯 Candidatos para 3x2 · frecuentes con ticket bajo">
+                        <TopFrecuentesBaratos data={metrics.top5FrecuentesBaratos} mediana={metrics.mediana} />
+                      </Card>
+            
+
+
+
+                      {/* Resumen 3 meses anteriores */}
+                      {historico && (
+                        <Card title="Resumen meses anteriores">
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                            {historico.map((m, i) => (
+                              <div key={i} style={{ background: C.surfaceAlt, borderRadius: 10, padding: "14px 16px", border: `1px solid ${C.border}` }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: m.pico ? 8 : 0 }}>
+                                  <div style={{ fontSize: 14, color: C.textMuted, fontWeight: 500 }}>{m.nombre}</div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                    <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'DM Mono',monospace" }}>{ars(m.total)}</div>
+                                    {m.variacion != null && (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 2,
+                                          fontSize: 11,
+                                          fontWeight: 700,
+                                          color: m.variacion >= 0 ? C.green : C.red,
+                                          background: m.variacion >= 0 ? "#3ecf8e18" : "#ff6b6b18",
+                                          padding: "2px 7px",
+                                          borderRadius: 12,
+                                        }}
+                                      >
+                                        <span>{m.variacion >= 0 ? "↑" : "↓"}</span>
+                                        <span>{Math.abs(m.variacion).toFixed(1)}%</span>
+                                      </div>
+                                    )}
+                                    {m.ipc != null && (
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: 2,
+                                          fontSize: 11,
+                                          fontWeight: 700,
+                                          color: C.blue,
+                                          background: "#4da6ff18",
+                                          padding: "2px 7px",
+                                          borderRadius: 12,
+                                        }}
+                                      >
+                                        <span>📊</span>
+                                        <span>{m.ipc.toFixed(1)}%</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                {m.pico && (
+                                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.accent, borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 8 }}>
+                                    <span>🏆</span>
+                                    <span>
+                                      Mejor día: <strong>día {m.pico.dia}, {m.pico.diaSemana}</strong> — {ars(m.pico.total)}
+                                    </span>
+                                  </div>
+                                )}
+                                <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap", borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+                                  <MiniStatSm label="Operaciones" value={m.cantOps.toLocaleString("es-AR")} color={C.blue} />
+                                  <MiniStatSm label="Ticket prom." value={ars(m.ticketProm)} color={C.green} />
+                                  <MiniStatSm label="Unidades" value={m.unidades.toLocaleString("es-AR")} color={C.purple} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </Card>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                {filtrosUI}
+
+                {filtered && filtered.length === 0 && (
+                  <div style={{ textAlign: "center", padding: 50, color: C.textMuted, background: C.surface, borderRadius: 14, border: `1px solid ${C.border}` }}>
+                    <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>Sin ventas en el período seleccionado
+                  </div>
+                )}
+
+                {metrics && filtered.length > 0 && (
+                  <>
+                    <div style={{ background: `linear-gradient(135deg,${C.surface} 0%,#1a2240 100%)`, borderRadius: 14, border: `1px solid ${C.border}`, padding: "22px 18px", marginBottom: 14 }}>
+                      <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: 2, marginBottom: 6 }}>Venta Total</div>
+                      <div style={{ fontSize: "clamp(28px,8vw,48px)", fontWeight: 700, color: C.accent, letterSpacing: "-1px", lineHeight: 1.1, fontFamily: "'DM Mono',monospace" }}>
+                        {ars(metrics.totalVentas)}
+                      </div>
+                      <div style={{ display: "flex", gap: 20, marginTop: 14, flexWrap: "wrap" }}>
+                        <MiniStat label="Operaciones" value={metrics.cantOps.toLocaleString("es-AR")} color={C.blue} />
+                        <MiniStat label="Ticket prom." value={ars(metrics.ticketProm)} color={C.green} />
+                        <MiniStat label="Unidades" value={metrics.totalUnidades.toLocaleString("es-AR")} color={C.purple} />
+                      </div>
                     </div>
-                  </Card>
+
+                    <Card title={metrics.singleDay ? "Ventas por hora" : "Ventas por día"}>
+                      {metrics.timeData.length === 0 ? (
+                        <NoData />
+                      ) : (
+                        <ResponsiveContainer width="100%" height={220}>
+                          <BarChart data={metrics.timeData} barSize={metrics.timeData.length > 14 ? 10 : 18}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
+                            <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={arsShort} />
+                            <Tooltip contentStyle={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8 }} labelStyle={{ color: C.text, fontWeight: 700 }} formatter={(v) => [ars(v), "Ventas"]} />
+                            <Bar dataKey="ventas" fill={C.accent} radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </Card>
+
+                    {/* ── NUEVO: Histograma de distribución de tickets ── */}
+                    {filtered.length >= 5 && (
+                      <Card title="Distribución de tickets">
+                        <HistogramaTickets filtered={filtered} ticketProm={metrics.ticketProm} />
+                      </Card>
+                    )}
+
+                    <Card title="Ventas por cajero">
+                      {metrics.empData.length === 0 ? (
+                        <NoData />
+                      ) : (
+                        <ResponsiveContainer width="100%" height={260}>
+                          <PieChart>
+                            <Pie data={metrics.empData} dataKey="value" nameKey="name" cx="50%" cy="45%" outerRadius={90} innerRadius={36} paddingAngle={2} labelLine={false} label={PieLabel}>
+                              {metrics.empData.map((_, i) => (
+                                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip contentStyle={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8 }} formatter={(v) => [ars(v), "Ventas"]} />
+                            <Legend formatter={(v) => <span style={{ color: C.text, fontSize: 12 }}>{v}</span>} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
+                    </Card>
+
+                    <Card title="Ventas por rubro">
+                      {metrics.catData.length === 0 ? (
+                        <NoData />
+                      ) : (
+                        <ResponsiveContainer width="100%" height={Math.max(220, metrics.catData.length * 30 + 40)}>
+                          <BarChart data={metrics.catData} layout="vertical" barSize={15} margin={{ right: 60 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
+                            <XAxis type="number" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={arsShort} />
+                            <YAxis type="category" dataKey="name" tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} width={108} />
+                            <Tooltip contentStyle={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8 }} formatter={(v) => [ars(v), "Ventas"]} />
+                            <Bar dataKey="value" radius={[0, 4, 4, 0]} label={<BarLabelRight />}>
+                              {metrics.catData.map((_, i) => (
+                                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      )}
+                    </Card>
+
+                    <Card title="🎯 Candidatos para 3x2 · frecuentes con ticket bajo">
+                      <TopFrecuentesBaratos data={metrics.top5FrecuentesBaratos} mediana={metrics.mediana} />
+                    </Card>
+
+                    <Card title="Top 5 artículos más vendidos">
+                      {!metrics.top5?.length ? (
+                        <NoData />
+                      ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {metrics.top5.map((p, i) => {
+                            const maxQty = metrics.top5[0].qty;
+                            const pct = maxQty > 0 ? (p.qty / maxQty) * 100 : 0;
+                            return (
+                              <div key={i}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+                                  <div style={{ fontSize: 12, color: C.text, fontWeight: 500, flex: 1, marginRight: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                    <span style={{ color: C.textMuted, marginRight: 6, fontSize: 11 }}>#{i + 1}</span>
+                                    {p.name}
+                                  </div>
+                                  <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 700, color: C.accent, fontFamily: "'DM Mono',monospace" }}>
+                                      {Math.round(p.qty).toLocaleString("es-AR")} u.
+                                    </span>
+                                    <span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{arsShort(p.total)}</span>
+                                  </div>
+                                </div>
+                                <div style={{ height: 4, borderRadius: 2, background: C.border }}>
+                                  <div style={{ height: "100%", borderRadius: 2, width: `${pct}%`, background: COLORS[i], transition: "width 0.4s ease" }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </Card>
+
+                    {/* Resumen 3 meses anteriores */}
+                    {historico && (
+                      <Card title="Resumen meses anteriores">
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {historico.map((m, i) => (
+                            <div key={i} style={{ background: C.surfaceAlt, borderRadius: 10, padding: "14px 16px", border: `1px solid ${C.border}` }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: m.pico ? 8 : 0 }}>
+                                <div style={{ fontSize: 14, color: C.textMuted, fontWeight: 500 }}>{m.nombre}</div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <div style={{ fontSize: 18, fontWeight: 700, color: C.text, fontFamily: "'DM Mono',monospace" }}>{ars(m.total)}</div>
+                                  {m.variacion != null && (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 700, color: m.variacion >= 0 ? C.green : C.red, background: m.variacion >= 0 ? "#3ecf8e18" : "#ff6b6b18", padding: "2px 7px", borderRadius: 12 }}>
+                                      <span>{m.variacion >= 0 ? "↑" : "↓"}</span>
+                                      <span>{Math.abs(m.variacion).toFixed(1)}%</span>
+                                    </div>
+                                  )}
+                                  {m.ipc != null && (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 2, fontSize: 11, fontWeight: 700, color: C.blue, background: "#4da6ff18", padding: "2px 7px", borderRadius: 12 }}>
+                                      <span>📊</span>
+                                      <span>{m.ipc.toFixed(1)}%</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              {m.pico && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.accent, borderTop: `1px solid ${C.border}`, paddingTop: 8, marginTop: 8 }}>
+                                  <span>🏆</span>
+                                  <span>
+                                    Mejor día: <strong>día {m.pico.dia}, {m.pico.diaSemana}</strong> — {ars(m.pico.total)}
+                                  </span>
+                                </div>
+                              )}
+                              <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap", borderTop: `1px solid ${C.border}`, paddingTop: 8 }}>
+                                <MiniStatSm label="Operaciones" value={m.cantOps.toLocaleString("es-AR")} color={C.blue} />
+                                <MiniStatSm label="Ticket prom." value={ars(m.ticketProm)} color={C.green} />
+                                <MiniStatSm label="Unidades" value={m.unidades.toLocaleString("es-AR")} color={C.purple} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </Card>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -1169,7 +1605,11 @@ export default function App() {
         )}
 
         {/* ── PESTAÑA HISTÓRICO ── */}
-        {db && tab==="historico" && <TabHistorico db={db}/>}
+        {db && tab==="historico" && (
+          <div style={{ maxWidth: isDesktop ? 900 : 680, margin: "0 auto" }}>
+            <TabHistorico db={db} />
+          </div>
+        )}
       </div>
     </div>
   );
