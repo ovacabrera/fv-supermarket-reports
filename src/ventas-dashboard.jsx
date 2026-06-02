@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, ComposedChart, Line, LineChart,
+  PieChart, Pie, Cell, Legend, ComposedChart, Line, LineChart, ReferenceLine,
 } from "recharts";
 
 const C = {
@@ -16,16 +16,13 @@ const MESES_NOMBRE = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","
 const MESES_CORTO  = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
 // ─── IPC INDEC hardcodeado (variación mensual %) ───────────────────────────────
-// índice [año][mes 0-11]  — null = sin dato todavía
 const IPC = {
   2023: [6.0, 6.6, 7.7, 8.4, 7.8, 6.0, 6.3, 12.4, 12.7, 8.3, 12.8, 25.5],
   2024: [20.6,13.2,11.0, 8.8, 4.2, 4.6, 4.0,  4.2,  3.5, 2.7,  2.4,  2.7],
   2025: [2.2,  2.4, 3.7, 2.8, 1.5, 1.6, 1.9,  1.9,  2.1, 2.3,  2.5,  2.8],
-  2026: [2.9,  2.9, null,null,null,null,null,  null, null,null, null, null],
+  2026: [2.9,  2.9, 3.4, 2.6, null,null,null,  null, null,null, null, null],
 };
 
-// Factor acumulado desde mesInicio hasta mesHasta (inclusive) del mismo año
-// Ej: acumuladoIPC(2024, 0, 11) = factor de inflación anual 2024
 function acumuladoFactor(year, mesInicio, mesFin) {
   let f = 1;
   const datos = IPC[year] || [];
@@ -36,7 +33,6 @@ function acumuladoFactor(year, mesInicio, mesFin) {
   return f;
 }
 
-// Factor total acumulado desde year/mes hasta hoy
 function factorHastaHoy(year, mes) {
   const hoy = new Date();
   const hoyYear = hoy.getFullYear();
@@ -159,6 +155,194 @@ function BarLabelRight({x,y,width,height,value}){
   return <text x={x+width+5} y={y+height/2} fill={C.textMuted} dominantBaseline="central" fontSize={10}>{arsShort(value)}</text>;
 }
 
+// ─── Tooltip histograma ────────────────────────────────────────────────────────
+function TooltipHistograma({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <div style={{background:C.surfaceAlt,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",fontSize:12}}>
+      <div style={{fontWeight:700,color:C.text,marginBottom:4}}>{d.rangoLabel}</div>
+      <div style={{color:C.accent}}>{d.cantidad} transacci{d.cantidad===1?"ón":"ones"}</div>
+      <div style={{color:C.textMuted,marginTop:2}}>{d.pctTotal?.toFixed(1)}% del total</div>
+    </div>
+  );
+}
+
+// ─── Histograma de distribución de tickets ────────────────────────────────────
+function HistogramaTickets({ filtered, ticketProm }) {
+  const histData = useMemo(() => {
+    if (!filtered?.length) return null;
+
+    // Filtrar outliers extremos (> 5x el ticket promedio) para que la escala sea legible
+    const totales = filtered.map(o => o.total).filter(t => t > 0);
+    if (!totales.length) return null;
+
+    // Calcular percentil 95 para el límite superior del histograma
+    const sorted = [...totales].sort((a, b) => a - b);
+    const p95 = sorted[Math.floor(sorted.length * 0.95)];
+    const maxVal = Math.max(p95, ticketProm * 2);
+
+    // Definir bins: queremos ~15 barras que cubran bien el rango
+    const NUM_BINS = 15;
+    const binSize = Math.ceil(maxVal / NUM_BINS / 100) * 100; // redondear a centenas
+    const actualBins = Math.ceil(maxVal / binSize) + 1;
+
+    // Inicializar bins
+    const bins = Array.from({ length: actualBins }, (_, i) => ({
+      desde: i * binSize,
+      hasta: (i + 1) * binSize,
+      cantidad: 0,
+    }));
+
+    // Acumular transacciones en cada bin
+    totales.forEach(t => {
+      const idx = Math.min(Math.floor(t / binSize), actualBins - 1);
+      if (bins[idx]) bins[idx].cantidad++;
+    });
+
+    const totalTx = totales.length;
+
+    return bins
+      .filter((b, i) => {
+        // Eliminar bins vacíos al final
+        const lastNonEmpty = bins.reduce((acc, b2, i2) => b2.cantidad > 0 ? i2 : acc, 0);
+        return i <= lastNonEmpty + 1;
+      })
+      .map(b => ({
+        ...b,
+        rangoLabel: `${arsShort(b.desde)} – ${arsShort(b.hasta)}`,
+        pctTotal: (b.cantidad / totalTx) * 100,
+        label: arsShort(b.desde),
+      }));
+  }, [filtered, ticketProm]);
+
+  if (!histData || !histData.length) return <NoData />;
+
+  // Encontrar el bin del ticket promedio
+  const binSize = histData[0]?.hasta - histData[0]?.desde;
+  const ticketBinIdx = histData.findIndex(b => ticketProm >= b.desde && ticketProm < b.hasta);
+  const maxCantidad = Math.max(...histData.map(d => d.cantidad));
+
+  // Stats adicionales
+  const totales = filtered.map(o => o.total).filter(t => t > 0).sort((a,b)=>a-b);
+  const mediana = totales.length
+    ? totales.length % 2 === 0
+      ? (totales[totales.length/2-1] + totales[totales.length/2]) / 2
+      : totales[Math.floor(totales.length/2)]
+    : 0;
+  const p25 = totales[Math.floor(totales.length * 0.25)] ?? 0;
+  const p75 = totales[Math.floor(totales.length * 0.75)] ?? 0;
+
+  // Calcular skewness simple (promedio vs mediana)
+  const sesgo = ticketProm > mediana * 1.1
+    ? "↗ Cola alta: hay algunas compras grandes que suben el promedio"
+    : ticketProm < mediana * 0.9
+    ? "↙ Cola baja: muchas compras pequeñas arrastran el promedio"
+    : "≈ Distribución bastante simétrica alrededor del promedio";
+
+  const TickLabel = ({ x, y, payload }) => {
+    if (!payload?.value) return null;
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={10} textAnchor="end" fill={C.textMuted} fontSize={9}
+          transform="rotate(-40)">{payload.value}</text>
+      </g>
+    );
+  };
+
+  return (
+    <div>
+      {/* Stats rápidos */}
+      <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+        <MiniStatSm label="Mediana" value={arsShort(mediana)} color={C.green}/>
+        <MiniStatSm label="Promedio" value={arsShort(ticketProm)} color={C.accent}/>
+        <MiniStatSm label="P25" value={arsShort(p25)} color={C.textMuted}/>
+        <MiniStatSm label="P75" value={arsShort(p75)} color={C.textMuted}/>
+      </div>
+
+      {/* Insight automático */}
+      <div style={{
+        background: C.surfaceAlt,
+        borderRadius: 8,
+        padding: "8px 12px",
+        marginBottom: 12,
+        fontSize: 11,
+        color: C.textMuted,
+        borderLeft: `3px solid ${C.accent}`,
+      }}>
+        {sesgo}
+      </div>
+
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={histData} margin={{top:10, right:16, left:0, bottom:30}}>
+          <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false}/>
+          <XAxis
+            dataKey="label"
+            interval={0}
+            tick={<TickLabel/>}
+            axisLine={false}
+            tickLine={false}
+            height={44}
+          />
+          <YAxis
+            tick={{fill:C.textMuted, fontSize:10}}
+            axisLine={false}
+            tickLine={false}
+            allowDecimals={false}
+            width={32}
+          />
+          <Tooltip content={<TooltipHistograma/>}/>
+
+          {/* Línea vertical del ticket promedio */}
+          {ticketBinIdx >= 0 && (
+            <ReferenceLine
+              x={histData[ticketBinIdx]?.label}
+              stroke={C.accent}
+              strokeDasharray="4 3"
+              strokeWidth={2}
+              label={{
+                value: "x̄ prom.",
+                position: "top",
+                fill: C.accent,
+                fontSize: 10,
+                fontWeight: 700,
+              }}
+            />
+          )}
+
+          <Bar
+            dataKey="cantidad"
+            name="Transacciones"
+            radius={[3,3,0,0]}
+          >
+            {histData.map((entry, index) => (
+              <Cell
+                key={index}
+                fill={index === ticketBinIdx ? C.accent : C.blue}
+                opacity={index === ticketBinIdx ? 1 : 0.55}
+              />
+            ))}
+          </Bar>
+        </ComposedChart>
+      </ResponsiveContainer>
+
+      <div style={{
+        display:"flex",gap:16,justifyContent:"center",marginTop:4,fontSize:11,color:C.textMuted
+      }}>
+        <span style={{display:"flex",alignItems:"center",gap:4}}>
+          <span style={{width:10,height:10,borderRadius:2,background:C.accent,display:"inline-block"}}/>
+          Bin con el promedio
+        </span>
+        <span style={{display:"flex",alignItems:"center",gap:4}}>
+          <span style={{width:10,height:10,borderRadius:2,background:C.blue,opacity:0.6,display:"inline-block"}}/>
+          Resto de rangos
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tooltip custom para gráfico histórico ─────────────────────────────────────
 function TooltipHistorico({ active, payload, label }) {
   if (!active || !payload?.length) return null;
@@ -180,7 +364,6 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
   const hoyYear = hoy.getFullYear();
   const hoyMes  = hoy.getMonth();
 
-  // Ventas por mes del año (ignorar ventas individuales > $10M, son errores de carga)
   const ventasMes = Array(12).fill(0);
   const opsMes    = Array(12).fill(0);
   orders.forEach(o => {
@@ -191,16 +374,6 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
     opsMes[m]    += 1;
   });
 
-  // Unidades por mes del año
-  const unidadesMes = Array(12).fill(0);
-  const ordIdsYear  = new Set(
-    orders.filter(o=>o.saleDate.getFullYear()===year&&o.total<=10_000_000).map(o=>o.id)
-  );
-  orderLines.forEach(ol=>{
-    if(!ordIdsYear.has(ol.orderId)) return;
-    unidadesMes[ol.orderId] // no tenemos mes en ol, lo saltamos — usamos orders
-  });
-  // Re-hacer correctamente agrupando por orden
   const ordenMes={};
   orders.forEach(o=>{
     if(o.saleDate.getFullYear()!==year||o.total>10_000_000) return;
@@ -213,7 +386,6 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
     unidadesMesCorrecto[m]+=ol.qty;
   });
 
-  // Métricas totales del año (hasta hoy si es año actual)
   const mesFin = year===hoyYear ? hoyMes : 11;
   let totalAnio=0, opsAnio=0, unidadesAnio=0;
   for(let m=0;m<=mesFin;m++){
@@ -223,7 +395,6 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
   }
   const ticketAnio = opsAnio ? totalAnio/opsAnio : 0;
 
-  // Ventas año anterior (solo para gráfico del año en curso)
   let ventasAnteriorMes = null;
   if (esActual) {
     ventasAnteriorMes = Array(12).fill(0);
@@ -238,7 +409,6 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
   const factorAnioActual = esActual ? acumuladoFactor(year, 0, hoyMes) : 1;
 
   const data = MESES_CORTO.map((mes, m) => {
-    // "futuro" solo aplica al año en curso y solo para meses que aún no ocurrieron
     const esFuturo = year === hoyYear && m > hoyMes;
     const ventas   = esFuturo ? null : Math.round(ventasMes[m]);
     const row      = { mes, ventas, ipc: ipcAnio[m] ?? null };
@@ -250,7 +420,6 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
 
   const maxVentas = Math.max(...data.map(d => Math.max(d.ventas||0, d.sombra||0)), 1);
 
-  // Tick rotado para que entren los 12 meses
   const TickRotado = ({ x, y, payload }) => (
     <g transform={`translate(${x},${y})`}>
       <text x={0} y={0} dy={10} textAnchor="end" fill={C.textMuted} fontSize={9}
@@ -258,7 +427,6 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
     </g>
   );
 
-  // Label encima de cada barra con el total
   const LabelBarra = ({ x, y, width, value }) => {
     if (!value) return null;
     return (
@@ -271,7 +439,6 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
 
   return (
     <Card title={`${year}${esActual ? " · año en curso" : ""}`}>
-      {/* Métricas del año */}
       <div style={{display:"flex",gap:14,marginBottom:12,flexWrap:"wrap",paddingBottom:10,borderBottom:`1px solid ${C.border}`}}>
         <MiniStatSm label="Total" value={arsShort(totalAnio)} color={C.accent}/>
         <MiniStatSm label="Operaciones" value={Math.round(opsAnio).toLocaleString("es-AR")} color={C.blue}/>
@@ -327,6 +494,96 @@ function LegendDot({color,label,faded,line}){
   );
 }
 
+// ─── Top productos frecuentes con ticket bajo ─────────────────────────────────
+function TooltipFrecuentes({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <div style={{background:C.surfaceAlt,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",fontSize:12}}>
+      <div style={{fontWeight:700,color:C.text,marginBottom:6,maxWidth:180,whiteSpace:"normal",lineHeight:1.3}}>{d.name}</div>
+      <div style={{color:C.green,marginBottom:2}}>🔁 {d.txCount} transacciones</div>
+      <div style={{color:C.textMuted}}>Subtotal prom.: {arsShort(d.subtotalProm)}</div>
+    </div>
+  );
+}
+
+function TopFrecuentesBaratos({ data, mediana }) {
+  if (!data?.length) return (
+    <div style={{padding:"20px 0",textAlign:"center",color:C.textMuted,fontSize:13}}>
+      No hay productos frecuentes con ticket bajo en este período
+    </div>
+  );
+
+  const LabelFrec = ({ x, y, width, height, value }) => {
+    if (!value) return null;
+    return (
+      <text x={x + width + 6} y={y + height / 2} dominantBaseline="central"
+        fill={C.textMuted} fontSize={10}>
+        {value} tx
+      </text>
+    );
+  };
+
+  const TickNombre = ({ x, y, payload }) => {
+    const texto = payload.value.length > 18 ? payload.value.slice(0, 17) + "…" : payload.value;
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text x={0} y={0} dy={4} textAnchor="end" fill={C.textMuted} fontSize={11}>{texto}</text>
+      </g>
+    );
+  };
+
+  return (
+    <div>
+      <div style={{
+        background:C.surfaceAlt, borderRadius:8, padding:"8px 12px",
+        marginBottom:14, fontSize:11, color:C.textMuted,
+        borderLeft:`3px solid ${C.green}`,
+      }}>
+        Productos que aparecen en más transacciones <strong style={{color:C.text}}>pero su subtotal promedio está por debajo de la mediana</strong> ({arsShort(mediana)}). Son los mejores candidatos para un <strong style={{color:C.green}}>3x2</strong>.
+      </div>
+
+      <ResponsiveContainer width="100%" height={Math.max(180, data.length * 48 + 20)}>
+        <BarChart
+          data={data}
+          layout="vertical"
+          barSize={22}
+          margin={{top:4, right:60, left:8, bottom:4}}
+        >
+          <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false}/>
+          <XAxis type="number" tick={{fill:C.textMuted,fontSize:10}} axisLine={false} tickLine={false}/>
+          <YAxis type="category" dataKey="name" tick={<TickNombre/>} axisLine={false} tickLine={false} width={130}/>
+          <Tooltip content={<TooltipFrecuentes/>}/>
+          <Bar dataKey="txCount" name="Transacciones" radius={[0,4,4,0]} label={<LabelFrec/>}>
+            {data.map((_, i) => (
+              <Cell key={i} fill={COLORS[i % COLORS.length]}/>
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+
+      <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:10}}>
+        {data.map((p,i)=>(
+          <div key={i} style={{
+            display:"flex", justifyContent:"space-between", alignItems:"center",
+            padding:"6px 10px", borderRadius:6, background:C.surfaceAlt,
+            fontSize:11,
+          }}>
+            <span style={{color:COLORS[i%COLORS.length],fontWeight:600,
+              maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {p.name}
+            </span>
+            <span style={{color:C.textMuted,fontFamily:"'DM Mono',monospace",flexShrink:0,marginLeft:8}}>
+              prom. {arsShort(p.subtotalProm)} / tx
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Pestaña Histórico ─────────────────────────────────────────────────────────
 function TabHistorico({ db }) {
   const hoyYear = new Date().getFullYear();
@@ -353,7 +610,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
   const [fileName, setFileName] = useState(null);
-  const [tab, setTab]         = useState("ventas"); // "ventas" | "historico"
+  const [tab, setTab]         = useState("ventas");
   const [calOpen, setCalOpen] = useState(false);
   const calRef = useRef(null);
 
@@ -416,7 +673,6 @@ export default function App() {
     const byEmp={};
     filtered.forEach(o=>{const name=db.employees[o.cashierId]||`Cajero ${o.cashierId}`;byEmp[name]=(byEmp[name]||0)+o.total;});
     const empData=Object.entries(byEmp).map(([name,value])=>({name,value:Math.round(value)})).sort((a,b)=>b.value-a.value);
-    // Por categoría — Fiambrería Ticket (productId=25912) va como rubro propio
     const FIAMBR_PROD_ID = 25912;
     const byCat={};
     db.orderLines.forEach(ol=>{
@@ -427,25 +683,45 @@ export default function App() {
       byCat[cat]=(byCat[cat]||0)+ol.subtotal;
     });
     const catData=Object.entries(byCat).map(([name,value])=>({name,value:Math.round(value)})).sort((a,b)=>b.value-a.value).slice(0,15);
-    // Top 5 productos por cantidad
     const byProd={};
     db.orderLines.forEach(ol=>{
       if(!filteredIds.has(ol.orderId)) return;
       if(!ol.productId||ol.productId===0) return;
       if(ol.productId===FIAMBR_PROD_ID) return;
       const nombre=db.products[ol.productId]||`Prod.${ol.productId}`;
-      if(!byProd[nombre]) byProd[nombre]={qty:0,total:0};
+      if(!byProd[nombre]) byProd[nombre]={qty:0,total:0,txCount:0};
       byProd[nombre].qty+=ol.qty;
       byProd[nombre].total+=ol.subtotal;
+      byProd[nombre].txCount+=1; // cuántas transacciones distintas incluyen este producto
     });
     const top5=Object.entries(byProd).map(([name,d])=>({name,qty:Math.round(d.qty),total:Math.round(d.total)})).sort((a,b)=>b.qty-a.qty).slice(0,5);
-    return{totalVentas,cantOps,ticketProm,totalUnidades,timeData,empData,catData,singleDay,top5};
+
+    // Mediana del negocio (tickets de las órdenes filtradas)
+    const ticketsSorted = filtered.map(o=>o.total).filter(t=>t>0).sort((a,b)=>a-b);
+    const mediana = ticketsSorted.length
+      ? ticketsSorted.length % 2 === 0
+        ? (ticketsSorted[ticketsSorted.length/2-1] + ticketsSorted[ticketsSorted.length/2]) / 2
+        : ticketsSorted[Math.floor(ticketsSorted.length/2)]
+      : 0;
+
+    // Top 5 productos: frecuentes (muchas transacciones) con subtotal promedio < mediana
+    const top5FrecuentesBaratos = Object.entries(byProd)
+      .map(([name,d])=>({
+        name,
+        txCount: d.txCount,
+        subtotalProm: d.txCount > 0 ? Math.round(d.total / d.txCount) : 0,
+        total: Math.round(d.total),
+      }))
+      .filter(p => p.subtotalProm < mediana && p.txCount >= 2)
+      .sort((a,b) => b.txCount - a.txCount)
+      .slice(0,5);
+
+    return{totalVentas,cantOps,ticketProm,totalUnidades,timeData,empData,catData,singleDay,top5,top5FrecuentesBaratos,mediana};
   },[filtered,db,dateFrom,dateTo]);
 
   const historico = useMemo(()=>{
     if(!db) return null;
     const now=new Date();
-    // Calculamos 4 meses para poder tener el "anterior" del mes más lejano
     const meses = Array.from({length:4},(_,i)=>{
       const ref=new Date(now.getFullYear(),now.getMonth()-1-i,1);
       const inicio=new Date(ref.getFullYear(),ref.getMonth(),1);
@@ -466,7 +742,6 @@ export default function App() {
       const ipcMes = (IPC[ref.getFullYear()]||[])[ref.getMonth()] ?? null;
       return{nombre:nombreMes.charAt(0).toUpperCase()+nombreMes.slice(1),total:Math.round(total),cantOps,ticketProm:Math.round(ticketProm),unidades,pico:picoInfo,ipc:ipcMes,ref};
     });
-    // Agregar variación respecto al mes anterior (índice i+1 en el array)
     return meses.slice(0,3).map((m,i)=>{
       const anterior = meses[i+1];
       const variacion = anterior && anterior.total > 0
@@ -501,7 +776,7 @@ export default function App() {
         {fileName && <div style={{marginLeft:"auto",fontSize:11,color:C.green,background:"#3ecf8e18",padding:"3px 10px",borderRadius:20,border:`1px solid #3ecf8e33`}}>✓ {fileName}</div>}
       </div>
 
-      {/* Tabs (solo si hay DB) */}
+      {/* Tabs */}
       {db && (
         <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,background:C.surface}}>
           {[["ventas","📊 Ventas"],["historico","📈 Histórico IPC"]].map(([id,label])=>(
@@ -580,6 +855,7 @@ export default function App() {
                     <MiniStat label="Unidades" value={metrics.totalUnidades.toLocaleString("es-AR")} color={C.purple}/>
                   </div>
                 </div>
+
                 <Card title={metrics.singleDay?"Ventas por hora":"Ventas por día"}>
                   {metrics.timeData.length===0?<NoData/>:(
                     <ResponsiveContainer width="100%" height={220}>
@@ -593,6 +869,14 @@ export default function App() {
                     </ResponsiveContainer>
                   )}
                 </Card>
+
+                {/* ── NUEVO: Histograma de distribución de tickets ── */}
+                {filtered.length >= 5 && (
+                  <Card title="Distribución de tickets">
+                    <HistogramaTickets filtered={filtered} ticketProm={metrics.ticketProm}/>
+                  </Card>
+                )}
+
                 <Card title="Ventas por cajero">
                   {metrics.empData.length===0?<NoData/>:(
                     <ResponsiveContainer width="100%" height={260}>
@@ -606,6 +890,7 @@ export default function App() {
                     </ResponsiveContainer>
                   )}
                 </Card>
+
                 <Card title="Ventas por rubro">
                   {metrics.catData.length===0?<NoData/>:(
                     <ResponsiveContainer width="100%" height={Math.max(220,metrics.catData.length*30+40)}>
@@ -621,6 +906,11 @@ export default function App() {
                     </ResponsiveContainer>
                   )}
                 </Card>
+
+                <Card title="🎯 Candidatos para 3x2 · frecuentes con ticket bajo">
+                  <TopFrecuentesBaratos data={metrics.top5FrecuentesBaratos} mediana={metrics.mediana}/>
+                </Card>
+
                 <Card title="Top 5 artículos más vendidos">
                   {!metrics.top5?.length ? <NoData/> : (
                     <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -647,6 +937,7 @@ export default function App() {
                     </div>
                   )}
                 </Card>
+
                 {/* Resumen 3 meses anteriores */}
                 {historico && (
                   <Card title="Resumen meses anteriores">
@@ -657,14 +948,12 @@ export default function App() {
                             <div style={{fontSize:14,color:C.textMuted,fontWeight:500}}>{m.nombre}</div>
                             <div style={{display:"flex",alignItems:"center",gap:6}}>
                               <div style={{fontSize:18,fontWeight:700,color:C.text,fontFamily:"'DM Mono',monospace"}}>{ars(m.total)}</div>
-                              {/* Flecha variación vs mes anterior */}
                               {m.variacion!=null && (
                                 <div style={{display:"flex",alignItems:"center",gap:2,fontSize:11,fontWeight:700,color:m.variacion>=0?C.green:C.red,background:m.variacion>=0?"#3ecf8e18":"#ff6b6b18",padding:"2px 7px",borderRadius:12}}>
                                   <span>{m.variacion>=0?"↑":"↓"}</span>
                                   <span>{Math.abs(m.variacion).toFixed(1)}%</span>
                                 </div>
                               )}
-                              {/* IPC del mes */}
                               {m.ipc!=null && (
                                 <div style={{display:"flex",alignItems:"center",gap:2,fontSize:11,fontWeight:700,color:C.blue,background:"#4da6ff18",padding:"2px 7px",borderRadius:12}}>
                                   <span>📊</span>
