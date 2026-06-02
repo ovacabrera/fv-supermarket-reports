@@ -15,6 +15,9 @@ const DIAS_LARGO  = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes",
 const MESES_NOMBRE = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const MESES_CORTO  = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
+// URL base del servidor local — mismo host, puerto 3001
+const SERVER = `${window.location.protocol}//${window.location.hostname}:3001`;
+
 // ─── IPC INDEC hardcodeado (variación mensual %) ───────────────────────────────
 const IPC = {
   2023: [6.0, 6.6, 7.7, 8.4, 7.8, 6.0, 6.3, 12.4, 12.7, 8.3, 12.8, 25.5],
@@ -55,6 +58,13 @@ function toYMD(d)  { return d.toISOString().slice(0,10); }
 function fromYMD(s){ return new Date(s + "T12:00:00"); }
 function sameDay(a,b){ return toYMD(a)===toYMD(b); }
 function addMonths(d,n){ return new Date(d.getFullYear(), d.getMonth()+n, 1); }
+function yesterday()   { const d=new Date(); d.setDate(d.getDate()-1); return toYMD(d); }
+
+function useWindowWidth() {
+  const [w, setW] = useState(typeof window!=="undefined" ? window.innerWidth : 800);
+  useEffect(()=>{ const h=()=>setW(window.innerWidth); window.addEventListener("resize",h); return ()=>window.removeEventListener("resize",h); },[]);
+  return w;
+}
 
 // ─── Calendario de rango ───────────────────────────────────────────────────────
 function RangeCalendar({ dateFrom, dateTo, onChange }) {
@@ -376,7 +386,7 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
 
   const ordenMes={};
   orders.forEach(o=>{
-    if(o.saleDate.getFullYear()!==year||o.total>10_000_000) return;
+    if(o.saleDate.getFullYear()!==year) return;
     ordenMes[o.id]=o.saleDate.getMonth();
   });
   const unidadesMesCorrecto=Array(12).fill(0);
@@ -400,7 +410,6 @@ function GraficoAnual({ year, orders, orderLines, esActual }) {
     ventasAnteriorMes = Array(12).fill(0);
     orders.forEach(o => {
       if (o.saleDate.getFullYear() !== year - 1) return;
-      if (o.total > 10_000_000) return;
       ventasAnteriorMes[o.saleDate.getMonth()] += o.total;
     });
   }
@@ -604,21 +613,129 @@ function TabHistorico({ db }) {
   );
 }
 
+// ─── Estado de la BD (banner superior) ─────────────────────────────────────────
+function DBStatusBanner({ dbInfo, onManualLoad }) {
+  if (!dbInfo) return null;
+  if (dbInfo.found) {
+    const fecha = new Date(dbInfo.modified);
+    const fechaStr = fecha.toLocaleDateString("es-AR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return (
+      <div
+        style={{
+          fontSize: 11,
+          color: C.green,
+          background: "#3ecf8e12",
+          padding: "6px 12px",
+          borderRadius: 8,
+          border: "1px solid #3ecf8e33",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <span>✓</span>
+        <span style={{ fontFamily: "'DM Mono',monospace", wordBreak: "break-all" }}>
+          {dbInfo.path}
+        </span>
+        <span style={{ color: C.textMuted }}>·</span>
+        <span style={{ color: C.textMuted }}>{fechaStr}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        fontSize: 11,
+        color: C.textMuted,
+        background: C.surfaceAlt,
+        padding: "6px 12px",
+        borderRadius: 8,
+        border: `1px solid ${C.border}`,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        flexWrap: "wrap",
+      }}
+    >
+      <span>⚠️ BD no encontrada automáticamente</span>
+      <button
+        onClick={onManualLoad}
+        style={{
+          background: C.accent,
+          color: "#000",
+          border: "none",
+          borderRadius: 6,
+          padding: "3px 10px",
+          fontSize: 11,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        Seleccionar archivo
+      </button>
+    </div>
+  );
+}
+
 // ─── App principal ─────────────────────────────────────────────────────────────
 export default function App() {
   const [db, setDb]           = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);
   const [fileName, setFileName] = useState(null);
+  const [dbInfo, setDbInfo]   = useState(null);
+  const [autoMode, setAutoMode] = useState(false);
+  const [showManual, setShowManual] = useState(false);
   const [tab, setTab]         = useState("ventas");
   const [calOpen, setCalOpen] = useState(false);
   const calRef = useRef(null);
+  const fileRef = useRef(null);
 
+  const ayer  = yesterday();
   const today = toYMD(new Date());
-  const [dateFrom, setDateFrom] = useState(today);
-  const [dateTo, setDateTo]     = useState(today);
+  const [dateFrom, setDateFrom] = useState(ayer);
+  const [dateTo, setDateTo]     = useState(ayer);
   const [timeFrom, setTimeFrom] = useState("00:00");
   const [timeTo, setTimeTo]     = useState("23:59");
+
+  // ─── Auto-carga desde servidor al iniciar ────────────────────────────────────
+  useEffect(() => {
+    async function autoLoad() {
+      setLoading(true);
+      setError(null);
+      try {
+        const infoRes = await fetch(`${SERVER}/api/db-info`, { signal: AbortSignal.timeout(3000) });
+        if (!infoRes.ok) throw new Error("server_down");
+        const info = await infoRes.json();
+        setDbInfo(info);
+
+        if (info.found) {
+          const dbRes = await fetch(`${SERVER}/api/db`, { signal: AbortSignal.timeout(30000) });
+          if (!dbRes.ok) throw new Error("fetch_failed");
+          const text = await dbRes.text();
+          setDb(parseHSQLScript(text));
+          setAutoMode(true);
+          setShowManual(false);
+          setFileName(info.path);
+        } else {
+          setShowManual(true);
+        }
+      } catch {
+        setDbInfo({ found: false, path: null });
+        setShowManual(true);
+      }
+      setLoading(false);
+    }
+    autoLoad();
+  }, []);
 
   useEffect(()=>{
     function handler(e){ if(calRef.current&&!calRef.current.contains(e.target)) setCalOpen(false); }
@@ -632,6 +749,8 @@ export default function App() {
     try {
       if(file.name.endsWith(".7z")||file.name.endsWith(".zip")){ setError("Descomprimí el .7z y subí fvposdb.script."); setLoading(false); return; }
       setDb(parseHSQLScript(await file.text()));
+      setAutoMode(false);
+      setShowManual(false);
     } catch(e){ setError("Error: "+e.message); }
     setLoading(false);
   },[]);
@@ -773,7 +892,28 @@ export default function App() {
       <div style={{borderBottom:`1px solid ${C.border}`,padding:"14px 18px",display:"flex",alignItems:"center",gap:10,background:C.surface}}>
         <div style={{width:32,height:32,borderRadius:7,background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:15}}>🛒</div>
         <div><div style={{fontWeight:700,fontSize:16}}>Panel de Ventas</div><div style={{fontSize:11,color:C.textMuted}}>FácilVirtual · HSQLDB</div></div>
-        {fileName && <div style={{marginLeft:"auto",fontSize:11,color:C.green,background:"#3ecf8e18",padding:"3px 10px",borderRadius:20,border:`1px solid #3ecf8e33`}}>✓ {fileName}</div>}
+        {db && (
+          <div style={{ marginLeft: "auto" }}>
+            {autoMode ? (
+              <DBStatusBanner dbInfo={dbInfo} onManualLoad={() => fileRef.current?.click()} />
+            ) : (
+              fileName && (
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: C.green,
+                    background: "#3ecf8e18",
+                    padding: "3px 10px",
+                    borderRadius: 20,
+                    border: "1px solid #3ecf8e33",
+                  }}
+                >
+                  ✓ {fileName}
+                </div>
+              )
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -793,15 +933,60 @@ export default function App() {
 
       <div style={{padding:"16px 14px",maxWidth:680,margin:"0 auto"}}>
 
+        {/* Input file oculto para carga manual */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="*"
+          style={{ display: "none" }}
+          onChange={(e) => handleFile(e.target.files?.[0])}
+        />
+
         {/* Upload */}
-        {!db && !loading && (
-          <div className="dropzone" style={{border:`2px dashed ${C.border}`,borderRadius:14,padding:"48px 20px",textAlign:"center",cursor:"pointer",background:C.surface}}
-            onDragOver={e=>e.preventDefault()} onDrop={onDrop} onClick={()=>document.getElementById("fi").click()}>
-            <div style={{fontSize:38,marginBottom:10}}>📂</div>
-            <div style={{fontSize:16,fontWeight:700,marginBottom:6}}>Subí <span style={{color:C.accent}}>fvposdb.script</span></div>
-            <div style={{fontSize:13,color:C.textMuted}}>Dentro del .7z en <code style={{color:C.accent}}>FacilVirtual/data/</code></div>
-            <input id="fi" type="file" accept="*" style={{display:"none"}} onChange={e=>handleFile(e.target.files[0])}/>
-          </div>
+        {!db && !loading && showManual && (
+          <>
+            {dbInfo && dbInfo.found === false && dbInfo.path && (
+              <div
+                style={{
+                  background: "#ff6b6b12",
+                  border: "1px solid #ff6b6b33",
+                  borderRadius: 10,
+                  padding: "12px 16px",
+                  marginBottom: 14,
+                  fontSize: 12,
+                  color: C.textMuted,
+                }}
+              >
+                ⚠️ No se encontró el archivo automáticamente en:
+                <br />
+                <span style={{ color: C.red, fontFamily: "'DM Mono',monospace" }}>{dbInfo.path}</span>
+                <br />
+                Seleccionalo manualmente:
+              </div>
+            )}
+            <div
+              className="dropzone"
+              style={{
+                border: `2px dashed ${C.border}`,
+                borderRadius: 14,
+                padding: "48px 20px",
+                textAlign: "center",
+                cursor: "pointer",
+                background: C.surface,
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={onDrop}
+              onClick={() => fileRef.current?.click()}
+            >
+              <div style={{ fontSize: 38, marginBottom: 10 }}>📂</div>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
+                Seleccioná <span style={{ color: C.accent }}>fvposdb.script</span>
+              </div>
+              <div style={{ fontSize: 13, color: C.textMuted }}>
+                Arrastrá o hacé click para buscar
+              </div>
+            </div>
+          </>
         )}
         {loading && <div style={{textAlign:"center",padding:60,color:C.textMuted}}><div style={{fontSize:28,marginBottom:10}}>⏳</div>Procesando base de datos...</div>}
         {error   && <div style={{background:"#ff6b6b18",border:`1px solid #ff6b6b44`,borderRadius:10,padding:"12px 16px",marginBottom:14,color:C.red}}>⚠️ {error}</div>}

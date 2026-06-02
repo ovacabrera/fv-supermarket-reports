@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "server": "node server/src/server.cjs",
+    "start": "concurrently \"npm run dev\" \"npm run server\"",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "express": "^4.18.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "recharts": "^2.3.2"
