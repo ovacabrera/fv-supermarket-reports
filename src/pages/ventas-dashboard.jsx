@@ -1026,7 +1026,7 @@ function VentasReportContent({ metrics, filtered, historico, isDesktop }) {
         {metrics.catData.length === 0 ? (
           <NoData />
         ) : (
-          <ResponsiveContainer width="100%" height={Math.max(220, metrics.catData.length * (isDesktop ? 24 : 30) + 40)}>
+          <ResponsiveContainer width="100%" height={Math.max(220, metrics.catData.length * (35) + 40)}>
             <BarChart data={metrics.catData} layout="vertical" barSize={isDesktop ? 12 : 15} margin={{ right: 60 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={C.border} horizontal={false} />
               <XAxis type="number" tick={{ fill: C.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={arsShort} />

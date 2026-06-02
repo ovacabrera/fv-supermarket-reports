@@ -1,15 +1,36 @@
 {
   "name": "ventas-dashboard-jsx",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "electron/main.cjs",
+
+  "build": {
+    "appId": "com.facilvirtual.dashboard",
+    "productName": "Panel Ventas FV",
+
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "server": "node server/src/server.cjs",
     "start": "concurrently \"npm run dev\" \"npm run server\"",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron": "electron .",
+    "dist": "electron-builder --win portable"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -22,6 +43,9 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^10.0.3",
+    "electron": "^42.3.2",
+    "electron-builder": "^26.8.1",
     "eslint": "^10.3.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",

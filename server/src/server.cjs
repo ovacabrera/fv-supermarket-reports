@@ -20,7 +20,9 @@ app.use((req, res, next) => {
 });
  
 // ─── Sirve el build de React (dist/) ─────────────────────────────────────────
-app.use(express.static(path.join(__dirname, "dist")));
+const DIST_PATH = path.join(__dirname, "../../dist");
+
+app.use(express.static(DIST_PATH));
  
 // ─── Endpoint: info del archivo DB ───────────────────────────────────────────
 app.get("/api/db-info", (req, res) => {
@@ -52,6 +54,11 @@ app.get("/api/db", (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ─── React SPA fallback ─────────────────────────────────────────────────────
+app.get("*", (req, res) => {
+  res.sendFile(path.join(DIST_PATH, "index.html"));
 });
  
 // ─── IP local (para mostrar en consola, útil para iPhone) ────────────────────
