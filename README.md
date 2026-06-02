@@ -15,8 +15,53 @@ The React Compiler is not enabled on this template because of its impact on dev 
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
 
+# Panel Ventas FV
 
-# Desarrollo
+Dashboard de reportes para FácilVirtual desarrollado con React, Express y Electron.
+
+## Arquitectura
+
+```text
+Electron
+   │
+   ▼
+Express (localhost:3001)
+   ├── Frontend React (build Vite)
+   ├── GET /api/db-info
+   └── GET /api/db
+           │
+           ▼
+      fvposdb.script
+```
+
+## Tecnologías
+
+* React 19
+* Vite
+* Express
+* Electron
+* Electron Builder
+* Recharts
+
+## Estructura del proyecto
+
+```text
+ventas-dashboard-jsx/
+├── electron/
+│   └── main.cjs
+│
+├── server/
+│   └── src/
+│       └── server.cjs
+│
+├── src/
+│   └── Frontend React
+│
+├── public/
+├── dist/
+├── package.json
+└── vite.config.js
+```
 
 ## Requisitos
 
@@ -29,28 +74,18 @@ If you are developing a production application, we recommend using TypeScript wi
 npm install
 ```
 
-## Ejecutar el proyecto
+## Desarrollo
 
-Para iniciar simultáneamente el frontend (Vite) y el backend (Express):
-
-```bash
-npm run start
-```
-
-Esto levantará:
-
-* Frontend React/Vite
-* Backend Node.js/Express
-
-## Comandos disponibles
-
-### Desarrollo completo
+### Iniciar frontend y backend
 
 ```bash
 npm run start
 ```
 
-Inicia frontend y backend en paralelo.
+Este comando inicia:
+
+* Vite (Frontend React)
+* Express (Backend)
 
 ### Solo frontend
 
@@ -64,34 +99,29 @@ npm run dev
 npm run server
 ```
 
-### Generar build de producción
+### Ejecutar Electron
+
+```bash
+npm run electron
+```
+
+Electron inicia automáticamente el servidor Express y abre la aplicación de escritorio.
+
+## Build de producción
+
+Generar el frontend compilado:
 
 ```bash
 npm run build
 ```
 
-### Previsualizar build generado
-
-```bash
-npm run preview
-```
-
-### Ejecutar ESLint
-
-```bash
-npm run lint
-```
-
-## Estructura principal
+El resultado se almacena en:
 
 ```text
-src/                    Frontend React
-server/
-└── src/
-    └── server.cjs      Backend Express
+dist/
 ```
 
-## Endpoints del backend
+## Endpoints
 
 ### Información de la base de datos
 
@@ -99,12 +129,16 @@ server/
 GET /api/db-info
 ```
 
-Devuelve:
+Respuesta:
 
-* existencia del archivo
-* ruta detectada
-* tamaño
-* fecha de modificación
+```json
+{
+  "found": true,
+  "path": "...",
+  "size": 12345,
+  "modified": "2026-06-02T12:34:56.000Z"
+}
+```
 
 ### Contenido de la base de datos
 
@@ -112,9 +146,9 @@ Devuelve:
 GET /api/db
 ```
 
-Devuelve el contenido completo del archivo `fvposdb.script`.
+Devuelve el contenido completo de `fvposdb.script`.
 
-## Ubicación automática del archivo de datos
+## Ubicación del archivo de datos
 
 ### Windows
 
@@ -128,8 +162,52 @@ C:\FacilVirtual\data\fvposdb.script
 ~/Downloads/fvposdb.script
 ```
 
-## Notas
+## Generación de ejecutable portable
 
-El proyecto utiliza `"type": "module"` en `package.json`.
+### Compilar frontend
 
-El backend se implementa en `server.cjs` (CommonJS) para mantener compatibilidad con `require()` sin necesidad de migrar el código a ES Modules.
+```bash
+npm run build
+```
+
+### Generar ejecutable
+
+```bash
+npm run dist
+```
+
+El ejecutable se genera en:
+
+```text
+release/
+```
+
+Ejemplo:
+
+```text
+release/
+└── Panel Ventas FV.exe
+```
+
+## Distribución
+
+El ejecutable portable:
+
+* No requiere instalación.
+* No requiere Node.js.
+* No requiere abrir navegador.
+* Inicia automáticamente el servidor interno.
+* Lee el archivo `fvposdb.script` desde la ubicación configurada.
+
+## Scripts disponibles
+
+```bash
+npm run dev
+npm run server
+npm run start
+npm run build
+npm run preview
+npm run electron
+npm run dist
+npm run lint
+```
