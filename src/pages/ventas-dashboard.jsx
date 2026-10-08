@@ -123,7 +123,7 @@ function parseHSQLScript(text) {
   function parseValues(line) { const m = line.match(/VALUES\((.+)\)$/s); if (!m) return null; const raw = m[1]; const vals = []; let cur = "", inStr = false, i = 0; while (i < raw.length) { const ch = raw[i]; if (ch === "'" && !inStr) { inStr = true; i++; continue; } if (ch === "'" && inStr) { if (raw[i + 1] === "'") { cur += "'"; i += 2; continue; } inStr = false; i++; continue; } if (ch === "," && !inStr) { vals.push(cur); cur = ""; i++; continue; } cur += ch; i++; } vals.push(cur); return vals; }
   function num(v) { if (!v || v === "NULL") return 0; return parseFloat(v.replace(/E0$/, "")) || 0; }
   function parseTS(v) { if (!v || v === "NULL") return null; return new Date(v.replace(/\.\d+$/, "").replace(" ", "T")); }
-  const orders = [], orderLines = [], employees = {}, categories = {}, products = {};
+  const orders = [], orderLines = [], orderPayments = [], employees = {}, categories = {}, products = {}, paymentTypes = {}, cashOperations = [];
   for (const line of lines) {
     if (line.startsWith("INSERT INTO FVPOS_ORDER VALUES")) {
       const v = parseValues(line); if (!v) continue;
@@ -144,9 +144,48 @@ function parseHSQLScript(text) {
     } else if (line.startsWith("INSERT INTO FVPOS_PRODUCT VALUES")) {
       const v = parseValues(line); if (!v) continue;
       products[num(v[0])] = v[6] || `Prod.${v[0]}`;
-    }
+
+    // ── Formas de pago ────────────────────────────────────────────────────────
+    // FVPOS_PAYMENT_TYPE: tabla maestra de medios de pago.
+    // Columna 0 = id (numérico), columna 2 = nombre visible.
+    // Si en tus datos el nombre está en otra columna, ajustá el índice aquí.
+    } else if (line.startsWith("INSERT INTO FVPOS_PAYMENT_TYPE VALUES")) {
+      const v = parseValues(line); if (!v) continue;
+      const id = num(v[0]);
+      const name = v[2] || v[1] || `Pago ${id}`;
+      paymentTypes[id] = name;
+
+
+//FVPOS_CASH_OPERATION es la tabla donde estan todas las operaciones de caja, apertura, cierre, venta.
+// Columna 0 = id propio, columna 1 = OPERATION_TYPE_ID, columna 2 = OPERATION_DATE, columna 3 = OPERATION_AMOUNT, columna 4 = OPERATION_NOTES. En el caso de las ventas, el OPERATION_AMOUNT es el total de la venta.    
+// OPERATION_TYPE_ID es el tipo de operación: 1 = APERTURA, 2 = CIERRE, 3 = VENTA.
+// OPERATION_DATE es la fecha y hora de la operación.
+// OPERATION_AMOUNT es el monto de la operación.
+// OPERATION_NOTES son las notas de la operación.
+
+//FVPOS_CREDIT_CARD es la tabla donde estan todas las tarjetas de credito, mercadopago, etc.
+// Columna 0 = id propio, columna 1 = CREDIT_CARD_TYPE_ID, columna 2 = CREDIT_CARD_NUMBER, columna 3 = CREDIT_CARD_EXPIRATION_DATE, columna 4 = CREDIT_CARD_CVV, columna 5 = CREDIT_CARD_HOLDER_NAME, columna 6 = CREDIT_CARD_HOLDER_EMAIL, columna 7 = CREDIT_CARD_HOLDER_PHONE.
+// CREDIT_CARD_TYPE_ID es el tipo de tarjeta: 1 = VISA, 2 = MASTERCARD, 3 = AMERICAN_EXPRESS, 4 = DINERS, 5 = DISCOVER, 6 = JCB, 7 = UNIONPAY, 8 = MAESTRO, 9 = RUPAY, 10 = OTHER.
+// CREDIT_CARD_NUMBER es el numero de tarjeta.
+// CREDIT_CARD_EXPIRATION_DATE es la fecha de expiracion de la tarjeta.
+// CREDIT_CARD_CVV es el codigo de seguridad de la tarjeta.
+// CREDIT_CARD_HOLDER_NAME es el nombre del titular de la tarjeta.
+// CREDIT_CARD_HOLDER_EMAIL es el email del titular de la tarjeta.
+
+//FVPOS_DEBIT_CARD es la tabla donde estan todas las tarjetas de débito.
+//FVPOS_ORDER es la tabla que tiene referencia al FK CREDIT_CARD_ID o DEBIT_CARD_ID, esto debe no generar ingreso de caja entonces, por un lado tenemos que buscar las ordenes que tienen FVPOS_CASH_OPERATION relacionada y por otro lado las ordenes con tarjetas o cuentas corrientes.
+
+} else if (line.startsWith("INSERT INTO FVPOS_CASH_OPERATION VALUES")) {
+  const v = parseValues(line); if (!v) continue;
+  const id = num(v[0]);
+  const operationTypeId = num(v[1]);
+  const operationDate = parseTS(v[2]);
+  const operationAmount = num(v[3]);
+  const operationNotes = v[4] || "";
+  cashOperations.push({ id, operationTypeId, operationDate, operationAmount, operationNotes });
+}
   }
-  return { orders, orderLines, employees, categories, products };
+  return { orders, orderLines, orderPayments, employees, categories, products, paymentTypes, cashOperations };
 }
 
 // ─── Helpers display ──────────────────────────────────────────────────────────
@@ -175,6 +214,21 @@ function TooltipHistograma({ active, payload, label }) {
       <div style={{ fontWeight: 700, color: C.text, marginBottom: 4 }}>{d.rangoLabel}</div>
       <div style={{ color: C.accent }}>{d.cantidad} transacci{d.cantidad === 1 ? "ón" : "ones"}</div>
       <div style={{ color: C.textMuted, marginTop: 2 }}>{d.pctTotal?.toFixed(1)}% del total</div>
+    </div>
+  );
+}
+
+// ─── Tooltip formas de pago ───────────────────────────────────────────────────
+function TooltipPagos({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
+  return (
+    <div style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", fontSize: 12 }}>
+      <div style={{ fontWeight: 700, color: C.text, marginBottom: 4 }}>{d.name}</div>
+      <div style={{ color: C.accent }}>{ars(d.value)}</div>
+      <div style={{ color: C.textMuted, marginTop: 2 }}>{d.pct?.toFixed(1)}% del total</div>
+      <div style={{ color: C.textMuted, marginTop: 2 }}>{d.count} transacciones</div>
     </div>
   );
 }
@@ -932,7 +986,7 @@ function FiltersBar({
   );
 }
 
-// ─── Contenido reporte Ventas (único bloque, orden manual aquí) ────────────────
+// ─── Contenido reporte Ventas ──────────────────────────────────────────────────
 function VentasReportContent({ metrics, filtered, historico, isDesktop }) {
   if (!metrics || !filtered?.length) return null;
 
@@ -989,6 +1043,82 @@ function VentasReportContent({ metrics, filtered, historico, isDesktop }) {
     </div>
   );
 
+  // ── Gráfico formas de pago ──────────────────────────────────────────────────
+  const paymentChart = metrics.paymentData?.length > 0 ? (
+    <Card title="Ventas por forma de pago">
+      <div style={{ display: "grid", gridTemplateColumns: isDesktop ? "1fr 1fr" : "1fr", gap: 0, alignItems: "center" }}>
+        <ResponsiveContainer width="100%" height={isDesktop ? 240 : 270}>
+          <PieChart>
+            <Pie
+              data={metrics.paymentData}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="45%"
+              outerRadius={isDesktop ? 90 : 100}
+              innerRadius={isDesktop ? 34 : 38}
+              paddingAngle={2}
+              labelLine={false}
+              label={PieLabel}
+            >
+              {metrics.paymentData.map((_, i) => (
+                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip content={<TooltipPagos />} />
+          </PieChart>
+        </ResponsiveContainer>
+
+        {/* Tabla resumen lateral */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: isDesktop ? "0 8px 0 0" : "12px 0 0 0" }}>
+          {metrics.paymentData.map((p, i) => (
+            <div key={i} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "7px 10px", borderRadius: 8, background: C.surfaceAlt,
+              borderLeft: `3px solid ${COLORS[i % COLORS.length]}`,
+            }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 1, flex: 1, minWidth: 0 }}>
+                <span style={{
+                  color: C.text, fontWeight: 600, fontSize: 12,
+                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                }}>
+                  {p.name}
+                </span>
+                <span style={{ color: C.textMuted, fontSize: 10 }}>
+                  {p.count} tx · {p.pct.toFixed(1)}%
+                </span>
+              </div>
+              <span style={{
+                color: COLORS[i % COLORS.length], fontWeight: 700,
+                fontFamily: "'DM Mono',monospace", fontSize: 13, flexShrink: 0, marginLeft: 8,
+              }}>
+                {arsShort(p.value)}
+              </span>
+            </div>
+          ))}
+
+          {/* Nota si no hay datos de medio de pago */}
+          {metrics.paymentDataMissing > 0 && (
+            <div style={{ fontSize: 10, color: C.textMuted, marginTop: 4, padding: "4px 10px" }}>
+              ⚠️ {metrics.paymentDataMissing} orden{metrics.paymentDataMissing !== 1 ? "es" : ""} sin medio de pago registrado
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  ) : (
+    // Fallback: si FVPOS_ORDER_PAYMENT no existe en la BD o está vacía
+    <Card title="Ventas por forma de pago">
+      <div style={{ padding: "24px 0", textAlign: "center", color: C.textMuted, fontSize: 13 }}>
+        <div style={{ fontSize: 24, marginBottom: 8 }}>💳</div>
+        <div>No se encontraron datos de formas de pago.</div>
+        <div style={{ fontSize: 11, marginTop: 6, color: C.textMuted, opacity: 0.7 }}>
+          Verificá que la BD incluya la tabla FVPOS_ORDER_PAYMENT
+        </div>
+      </div>
+    </Card>
+  );
+
   return (
     <>
       <div
@@ -1043,6 +1173,9 @@ function VentasReportContent({ metrics, filtered, historico, isDesktop }) {
       </Card>
 
       {chartPair}
+
+      {/* ── Forma de pago ── */}
+      {paymentChart}
 
       {filtered.length >= 5 && (
         <Card title="Distribución de tickets">
@@ -1343,11 +1476,11 @@ export default function App() {
       if (!byProd[nombre]) byProd[nombre] = { qty: 0, total: 0, txCount: 0 };
       byProd[nombre].qty += ol.qty;
       byProd[nombre].total += ol.subtotal;
-      byProd[nombre].txCount += 1; // cuántas transacciones distintas incluyen este producto
+      byProd[nombre].txCount += 1;
     });
     const top10 = Object.entries(byProd).map(([name, d]) => ({ name, qty: Math.round(d.qty), total: Math.round(d.total) })).sort((a, b) => b.qty - a.qty).slice(0, 10);
 
-    // Mediana del negocio (tickets de las órdenes filtradas)
+    // Mediana
     const ticketsSorted = filtered.map(o => o.total).filter(t => t > 0).sort((a, b) => a - b);
     const mediana = ticketsSorted.length
       ? ticketsSorted.length % 2 === 0
@@ -1355,7 +1488,7 @@ export default function App() {
         : ticketsSorted[Math.floor(ticketsSorted.length / 2)]
       : 0;
 
-    // Top 5 candidatos 3x2: frecuentes con subtotal promedio por debajo de la mediana
+    // Top 5 candidatos 3x2
     const top5FrecuentesBaratos = Object.entries(byProd)
       .map(([name, d]) => ({
         name,
@@ -1367,7 +1500,48 @@ export default function App() {
       .sort((a, b) => b.txCount - a.txCount)
       .slice(0, 5);
 
-    return { totalVentas, cantOps, ticketProm, totalUnidades, timeData, empData, catData, singleDay, top10, top5FrecuentesBaratos, mediana };
+    // ── Formas de pago ────────────────────────────────────────────────────────
+    // Cruzamos orderPayments con los ids filtrados.
+    // Si no hay datos en db.orderPayments, paymentData quedará vacío
+    // y el componente mostrará el fallback informativo.
+    const byPayment = {};
+    const byPaymentCount = {};
+    let paymentDataMissing = 0;
+    const ordersWithPayment = new Set();
+
+    if (db.orderPayments && db.orderPayments.length > 0) {
+      db.orderPayments.forEach(p => {
+        if (!filteredIds.has(p.orderId)) return;
+        ordersWithPayment.add(p.orderId);
+        // Nombre del medio de pago: buscamos en la tabla maestra.
+        // Si no está registrado (paymentTypeId=0 o sin nombre), usamos "Sin especificar".
+        const name = (p.paymentTypeId && db.paymentTypes[p.paymentTypeId])
+          ? db.paymentTypes[p.paymentTypeId]
+          : (p.paymentTypeId ? `Medio ${p.paymentTypeId}` : "Sin especificar");
+
+        byPayment[name] = (byPayment[name] || 0) + p.amount;
+        byPaymentCount[name] = (byPaymentCount[name] || 0) + 1;
+      });
+
+      // Órdenes sin ningún registro de pago en FVPOS_ORDER_PAYMENT
+      filteredIds.forEach(id => { if (!ordersWithPayment.has(id)) paymentDataMissing++; });
+    }
+
+    const paymentTotal = Object.values(byPayment).reduce((s, v) => s + v, 0) || totalVentas;
+    const paymentData = Object.entries(byPayment)
+      .map(([name, value]) => ({
+        name,
+        value: Math.round(value),
+        count: byPaymentCount[name] || 0,
+        pct: paymentTotal > 0 ? (value / paymentTotal) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value);
+
+    return {
+      totalVentas, cantOps, ticketProm, totalUnidades, timeData, empData, catData,
+      singleDay, top10, top5FrecuentesBaratos, mediana,
+      paymentData, paymentDataMissing,
+    };
   }, [filtered, db, dateFrom, dateTo]);
 
   const historico = useMemo(() => {
@@ -1422,7 +1596,6 @@ export default function App() {
         button{cursor:pointer;font-family:inherit}
         .dropzone:hover{border-color:#e8a838!important}
       `}</style>
-
 
       <input
         ref={fileRef}
