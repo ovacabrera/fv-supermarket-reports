@@ -1034,13 +1034,13 @@ function VentasReportContent({ metrics, filtered, historico, isDesktop }) {
       </div>
     </Card>
   ) : (
-    // Fallback: si FVPOS_ORDER_PAYMENT no existe en la BD o está vacía
+    // Fallback: el período no tiene pagos registrados (columnas PAYMENT_NET_* de FVPOS_ORDER)
     <Card title="Ventas por forma de pago">
       <div style={{ padding: "24px 0", textAlign: "center", color: C.textMuted, fontSize: 13 }}>
         <div style={{ fontSize: 24, marginBottom: 8 }}>💳</div>
         <div>No se encontraron datos de formas de pago.</div>
         <div style={{ fontSize: 11, marginTop: 6, color: C.textMuted, opacity: 0.7 }}>
-          Verificá que la BD incluya la tabla FVPOS_ORDER_PAYMENT
+          Las ventas del período no tienen montos de pago registrados
         </div>
       </div>
     </Card>
@@ -1450,7 +1450,7 @@ export default function App() {
         byPaymentCount[name] = (byPaymentCount[name] || 0) + 1;
       });
 
-      // Órdenes sin ningún registro de pago en FVPOS_ORDER_PAYMENT
+      // Órdenes sin ningún monto de pago (todas las PAYMENT_NET_* en 0)
       filteredIds.forEach(id => { if (!ordersWithPayment.has(id)) paymentDataMissing++; });
     }
 
