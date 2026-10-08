@@ -26,6 +26,7 @@
     "dev": "vite",
     "build": "vite build",
     "server": "node server/src/server.cjs",
+    "snapshot": "node scripts/export-snapshot.mjs",
     "start": "concurrently \"npm run dev\" \"npm run server\"",
     "lint": "eslint .",
     "preview": "vite preview",
