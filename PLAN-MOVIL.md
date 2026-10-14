@@ -2,7 +2,7 @@
 
 > Documento de traspaso para seguir el trabajo en otra sesión de chat.
 > Marcado: `[x]` hecho y commiteado · `[ ]` pendiente.
-> Última actualización: 2026-10-08.
+> Última actualización: 2026-10-14.
 
 ## Objetivo
 
@@ -103,20 +103,58 @@ Commit `9628dda`.
 
 ---
 
-## Fase 3: publicación automática ⬜
+## Fase 3: publicación automática 🟡
 
-- [ ] Crear el proyecto en **Cloudflare Pages** con deploy directo por `wrangler`, sin Git.
-- [ ] Configurar **Cloudflare Access** (Zero Trust, plan gratis): una aplicación sobre el dominio `*.pages.dev`, con una política de emails permitidos y login por código o Google.
-  - Proteger también los deploys de preview.
-- [ ] Script de publicación, por ejemplo `scripts/publish.mjs` o `npm run publish`:
-  1. `npm run build`
-  2. `npm run snapshot -- --out dist/data`, para que queden `dist/data/snapshot.json.gz` y `dist/data/meta.json`.
-  3. `npx wrangler pages deploy dist --project-name <nombre>`, con token en una variable de entorno (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) y **nunca en el repo**.
-- [ ] Para no rebuildear el front en cada publicación de datos: hacer el build una vez y en cada corrida copiar solo los datos nuevos a `dist/data/` antes del deploy.
-- [ ] **Programador de tareas de Windows** en la PC del POS: correr la publicación todos los días (por ejemplo 23:30, después del cierre), o cada hora en horario comercial. Que guarde un log en un archivo.
-- [ ] Revisar cómo Pages sirve el `.gz`. El front debe descomprimir solo con `DecompressionStream("gzip")` y no depender de `Content-Encoding`. Si Pages agrega `Content-Encoding: gzip`, renombrar el archivo a `snapshot.bin`.
-  - Límite de Pages: 25 MiB por archivo. Hoy el snapshot pesa 4,3 MB.
-- [ ] Agregar `_headers` en `dist`: `Cache-Control: no-cache` para `/data/*` y `/index.html`, y cache largo para `/assets/*`.
+### Hecho en el repo
+
+- [x] `wrangler` como devDependency.
+- [x] **`scripts/publish.mjs`** (`npm run publish -- [--build] [--db <ruta>] [--dry-run]`):
+  1. Lee `.env` (`CF_PAGES_PROJECT`, opcional `FV_DB_PATH`; `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` si no hay `wrangler login`). Ver `.env.example`.
+  2. **Chequeo de seguridad:** pide `https://<proyecto>.pages.dev/` y exige el redirect a `*.cloudflareaccess.com` (o 401/403 con cabeceras `cf-access`). Si la URL está abierta o no responde, **no publica**. En `--dry-run` solo avisa.
+  3. Rearma el front solo con `--build` o si falta `dist/index.html`. Copia `public/_headers` siempre.
+  4. `export-snapshot.mjs --out dist/data`.
+  5. `wrangler pages deploy dist --branch main`.
+  6. Repite el chequeo sobre la URL propia del deploy (`<hash>.<proyecto>.pages.dev`) y falla si está abierta.
+  - Log en `logs/publish.log` (ignorado por git). Sale con código ≠ 0 si algo falla.
+  - Probado: se niega con proyecto inexistente y con un `pages.dev` público; `--dry-run` genera `dist/data` (4,3 MB).
+- [x] **`public/_headers`**: `no-cache` para `/`, `/index.html` y `/data/*`; cache inmutable para `/assets/*`; `noindex` y `no-referrer` en todo.
+- [x] **`scripts/publish-task.cmd`**: wrapper para el Programador de tareas.
+- [x] `electron-builder` excluye `dist/data/**` para que el instalador no lleve los datos.
+
+### Pendiente (lo hace el usuario, en este orden)
+
+**El orden importa: Access tiene que estar activo antes del primer deploy.** El script lo verifica igual.
+
+- [x] **1. Login de wrangler** en la Mac: `npx wrangler login`.
+- [x] **2. Crear el proyecto** sin subir nada: `npx wrangler pages project create panel-ventas-fv --production-branch main`. Si el nombre está tomado, usar otro y ponerlo en `CF_PAGES_PROJECT`.
+- [x] **3. Cloudflare Access** (equipo `hidden-darkness-abda`) (one.dash.cloudflare.com, plan Free de Zero Trust, hasta 50 usuarios; la primera vez pide elegir un nombre de equipo y puede pedir tarjeta aunque sea gratis):
+  - Access → Applications → Add → **Self-hosted**.
+  - Dominios: `panel-ventas-fv.pages.dev` **y** `*.panel-ventas-fv.pages.dev` (los deploys y previews).
+  - Session duration: 1 mes.
+  - Crear un **Access Group "Familia"** con los emails permitidos y una política *Allow → Include → Group: Familia*.
+  - Login: **One-time PIN**. **No viene activo**: el único método por defecto es "Cloudflare" (cuenta de Cloudflare) con redirección automática. Hay que agregarlo en Integrations → Identity providers → Add new → One-time PIN, y en la aplicación → Login methods marcar solo One-time PIN y desactivar *Instant Auth*.
+  - Opcional: **Google** en el mismo lugar. Redirect URI para Google Cloud: `https://hidden-darkness-abda.cloudflareaccess.com/cdn-cgi/access/callback`.
+  - Después del código, un **522** significa que el proyecto todavía no tiene deploy.
+  - Comprobar: abrir la URL en una ventana privada → debe aparecer la pantalla de login de Cloudflare.
+- [ ] **4. Token de API** (solo para la PC del POS; en la Mac alcanza con `wrangler login`): My Profile → API Tokens → Create Token → *Custom*, permiso **Account → Cloudflare Pages → Edit**, solo esta cuenta. Copiar `.env.example` a `.env` y completar.
+- [x] **5. Primera publicación** desde la Mac (2026-10-14): `npm run publish -- --build`. Verificado: sin login, `/`, `/data/*` y la URL del deploy responden 302 al login de Access.
+  - El front todavía no lee `/data` (Fase 4): en el celular se ve el selector de archivo.
+- [ ] **6. PC del POS (Windows)**:
+  - Instalar Node LTS, copiar/clonar el repo, `npm ci`, crear `.env` (la ruta de la base por defecto ya es `C:\FacilVirtual\data\fvposdb.script`).
+  - Probar a mano: `scripts\publish-task.cmd --build`.
+  - Programar (cmd como el usuario de la PC):
+    `schtasks /Create /TN "FV Publicar reportes" /SC DAILY /ST 23:30 /TR "\"C:\ruta\al\repo\scripts\publish-task.cmd\""`
+    Para cada hora en horario comercial: `/SC HOURLY /ST 09:00 /ET 22:00` (o configurar la repetición en la interfaz del Programador).
+  - Revisar `logs\publish.log` al día siguiente.
+- [ ] **7. Verificar cómo sirve Pages el `.gz`** (necesita una sesión de Access; se hace en la Fase 4 desde el navegador): si llega con `Content-Encoding: gzip`, el navegador ya lo descomprime. El front debe mirar los primeros bytes (`1f 8b` = todavía comprimido) antes de usar `DecompressionStream`. Límite de Pages: 25 MiB por archivo; hoy 4,3 MB.
+
+### Gestión de usuarios (después)
+
+- Lista de emails: Zero Trust → Access → **Access Groups → "Familia"** (o en la política de la aplicación). El cambio aplica al instante, sin redeploy.
+- Cada persona entra con **su propio** email; el código le llega a su casilla. El dueño de la cuenta no recibe nada.
+- Quitar a alguien **no corta su sesión** activa: además ir a **My Team → Users → Revoke session**.
+- Ver quién entró: **Logs → Access**.
+- iPhone: la PWA instalada tiene cookies aparte de Safari, hay que loguearse dentro de la app instalada (el PIN funciona bien ahí).
 
 ## Fase 4: el front carga el snapshot ⬜
 

@@ -1,0 +1,20 @@
+# Cloudflare Pages: cabeceras HTTP (Vite copia este archivo a dist/).
+
+# Los datos y el index cambian en cada publicación: el navegador siempre revalida.
+/data/*
+  Cache-Control: no-cache
+  X-Robots-Tag: noindex
+
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+# Los assets de Vite llevan hash en el nombre: se pueden cachear para siempre.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  X-Robots-Tag: noindex
+  Referrer-Policy: no-referrer
