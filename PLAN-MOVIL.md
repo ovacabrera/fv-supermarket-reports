@@ -13,9 +13,10 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 
 - ✅ **Funciona de punta a punta desde la Mac**: `npm run publish` genera la foto y la sube a `https://panel-ventas-fv.pages.dev`, protegido con Cloudflare Access (código por mail, grupo "Familia").
 - ✅ **Probado en iPhone**: abre los reportes sin elegir archivo, guarda la foto en el teléfono y muestra "Datos al …".
-- ⬜ **Falta la producción real**: que la **PC del POS** publique sola todos los días. Hoy los datos publicados son de la base copiada a la Mac (08/10), por eso se ven en rojo como viejos.
+- ✅ **Rediseño publicado (Fase 8)**: reportes nuevos, pensados para el celular, probados en iPhone y Android el 2026-10-14.
+- ⬜ **Falta la producción real**: que la **PC del POS** publique sola todos los días. Hoy los datos publicados son de la base copiada a la Mac (13/10), y se ven en rojo como viejos cuando pasan más de 36 h.
 - ⬜ **Repo de GitHub público**: pasarlo a privado (ver P1).
-- ⬜ Después: **Fase 7** (leer también el `.log`, para tener datos al momento) y **Fase 8** (rediseño de los reportes).
+- ⬜ Después: **Fase 7** (leer también el `.log`, para tener datos al momento) y **Fase 5** (PWA, con la identidad visual nueva).
 
 ## Próximos pasos: puesta en producción
 
@@ -324,37 +325,37 @@ Objetivo: que la foto incluya **todas las ventas hasta el momento de publicar**,
   - Dejarlo como `scripts/verify-log.mjs`.
 - [ ] Después de esta fase, revisar el horario de **P5**: se puede publicar cada hora en horario comercial (por ejemplo de 9 a 22) más una vez después del cierre.
 
-## Fase 8: rediseño del look & feel y de la estructura de los reportes ⬜
+## Fase 8: rediseño del look & feel y de la estructura de los reportes ✅ (publicado y probado en iPhone y Android el 2026-10-14)
 
 Objetivo: que los reportes se vean profesionales, se lean bien en el celular (uso principal) y estén ordenados por la pregunta que responden, no por el tipo de gráfico.
 
 ### Herramienta
 
 - Usar la skill **`frontend-design`** de `anthropics/skills` (`anthropics/skills@frontend-design`).
-  - [ ] Instalarla en el proyecto (`.claude/skills/`), por ejemplo con `npx skills add anthropics/skills@frontend-design`, y commitearla para que esté disponible en cualquier sesión.
+  - [x] Instalarla en el proyecto (`.claude/skills/`), por ejemplo con `npx skills add anthropics/skills@frontend-design`, y commitearla para que esté disponible en cualquier sesión.
   - Para los gráficos, complementar con la skill **`dataviz`** (paleta, ejes, tooltips y modo claro/oscuro consistentes).
 
 ### Tareas
 
-- [ ] **Relevamiento**: capturas actuales (celular y escritorio) de Ventas e Histórico IPC; lista de cada métrica y gráfico, qué pregunta responde y si se usa.
-- [ ] **Arquitectura de información** (propuesta inicial, a validar con el usuario):
+- [x] **Relevamiento** (se hizo sobre el código: cada métrica se mantuvo y se reubicó por sección): capturas actuales (celular y escritorio) de Ventas e Histórico IPC; lista de cada métrica y gráfico, qué pregunta responde y si se usa.
+- [x] **Arquitectura de información**: se eligió reordenar lo existente sin métricas nuevas, en 4 secciones: **Ventas** (total, por hora/día, cajeros, cuánto gasta cada cliente), **Productos** (rubros, más vendidos, candidatos 3x2), **Pagos** e **Histórico** (últimos meses + año por año). Resumen comparativo y Caja quedan para después. Propuesta original:
   - **Resumen**: hoy / ayer / semana / mes, comparados con el período anterior y el mismo período del año pasado (en pesos y ajustado por IPC).
   - **Ventas**: evolución por día y por hora, ticket promedio y mediana, cantidad de operaciones.
   - **Productos y categorías**: top por importe y por unidades, categorías, candidatos a promociones.
   - **Medios de pago**: efectivo vs MercadoPago, evolución.
   - **Caja**: aperturas y cierres, retiros, diferencias (requiere revisar las 818 ventas con monto distinto; ver pendientes de datos).
   - **Histórico IPC**: lo actual, mejorado.
-- [ ] **Sistema de diseño**: tokens de color, tipografía, espaciado y radios en un solo lugar; modo oscuro (actual) y claro; reemplazar los estilos inline repetidos.
-- [ ] **Mobile first**: navegación inferior con pestañas en el celular, barra lateral en escritorio; selector de período cómodo con el pulgar; tarjetas de KPI legibles a 390 px.
-- [ ] **Estructura del código**: partir `ventas-dashboard.jsx` (~1.700 líneas) en:
+- [x] **Sistema de diseño** (dirección "etiqueta de góndola": la venta total es una etiqueta de precio amarilla, Barlow / Barlow Condensed, tokens en `src/index.css`, colores de gráficos en `src/lib/theme.js` validados con la skill dataviz): tokens de color, tipografía, espaciado y radios en un solo lugar; modo oscuro (actual) y claro; reemplazar los estilos inline repetidos.
+- [x] **Mobile first**: navegación inferior con pestañas en el celular, barra lateral en escritorio; selector de período cómodo con el pulgar; tarjetas de KPI legibles a 390 px.
+- [x] **Estructura del código**: partir `ventas-dashboard.jsx` (~1.700 líneas) en:
   - `src/lib/metrics.js`: cálculos puros (sin React), testeables.
   - `src/components/`: tarjetas, gráficos, filtros, navegación.
   - `src/pages/`: una página por sección.
-  - Corregir de paso los 11 errores de lint viejos.
-- [ ] **Sin cambios en los números**: antes de refactorizar, guardar las métricas de 3 o 4 rangos fijos (un día, una semana, un mes, un año) y compararlas después. Tienen que dar igual, salvo las correcciones de datos de P7.
-- [ ] **Rendimiento**: code-splitting por página (absorbe el punto de la Fase 6) y cálculos pesados memoizados o en un Web Worker si en el celular tardan.
+  - Corregir de paso los 11 errores de lint viejos. (Hecho: `npm run lint` sin errores.)
+- [x] **Sin cambios en los números**: comparado con 5 rangos fijos (día, semana, mes, mes con franja horaria, año), histograma, resumen mensual y anual: idénticos. Después se corrigió `toYMD` (usaba UTC): las ventas después de las 21 h caían en el día siguiente en "ventas por día" y "mejor día" (la semana mostraba 8 barras y septiembre 31). Los totales no cambian. Requisito original: antes de refactorizar, guardar las métricas de 3 o 4 rangos fijos (un día, una semana, un mes, un año) y compararlas después. Tienen que dar igual, salvo las correcciones de datos de P7.
+- [x] **Rendimiento**: code-splitting por página (`React.lazy`; Recharts queda en su propio chunk). En los teléfonos de prueba anduvo bien; un Web Worker queda solo si se nota lento con más datos.
 - [ ] Coordinar con la **Fase 5 (PWA)**: íconos, `theme_color` y pantalla de inicio con la misma identidad visual.
-- [ ] Probar en iPhone y en Android antes de publicar; publicar con `npm run publish -- --build`.
+- [x] Probar en iPhone y en Android antes de publicar; publicar con `npm run publish -- --build`. Publicado el 2026-10-14 (con la base del 13/10, usando la sesión de `wrangler login` de la Mac) y probado en ambos: todo funciona bien.
 
 ### Orden sugerido
 
@@ -370,7 +371,7 @@ P7 (datos) → Fase 7 (`.log`) → Fase 8 (rediseño) → Fase 5 (PWA, con la id
   - Opción: contar 1 unidad por línea cuando PRICE = 1.
 - [ ] **818 ventas en caja** donde `operationAmount` es distinto del total de la orden. Seguramente son pagos mixtos (parte efectivo, parte MercadoPago). Revisarlas antes de armar un reporte de caja.
 - [ ] **4 órdenes** donde la suma de pagos no coincide con el total: ids 120062, 120119, 120196 y 120288 (pagos menores al total).
-- [ ] Lint: `ventas-dashboard.jsx` tiene 11 errores de antes de este plan (variables sin usar, "Cannot create components during render"). No se tocaron. El de "setState dentro de un effect" desapareció al reescribir la carga en la Fase 4.
+- [x] Lint: `ventas-dashboard.jsx` tenía 11 errores de antes de este plan (variables sin usar, "Cannot create components during render"). No se tocaron. El de "setState dentro de un effect" desapareció al reescribir la carga en la Fase 4.
 
 ## Cómo verificar cambios en el parser o el snapshot
 
