@@ -14,6 +14,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - ✅ **Funciona de punta a punta desde la Mac**: `npm run publish` genera la foto y la sube a `https://panel-ventas-fv.pages.dev`, protegido con Cloudflare Access (código por mail, grupo "Familia").
 - ✅ **Probado en iPhone**: abre los reportes sin elegir archivo, guarda la foto en el teléfono y muestra "Datos al …".
 - ⬜ **Falta la producción real**: que la **PC del POS** publique sola todos los días. Hoy los datos publicados son de la base copiada a la Mac (08/10), por eso se ven en rojo como viejos.
+- ⬜ Después: **Fase 7** (leer también el `.log`, para tener datos al momento) y **Fase 8** (rediseño de los reportes).
 
 ## Próximos pasos: puesta en producción
 
@@ -57,7 +58,7 @@ HSQLDB guarda los cambios recientes en `fvposdb.log` y recién los pasa a `fvpos
   - Si el `.script` **no cambia en todo el día** y el `.log` sí: publicar una vez al día, **después del cierre del POS**. Publicar cada hora no sumaría nada.
   - Si el `.script` se actualiza durante el día: se puede publicar cada hora en horario comercial.
 - [ ] Anotar el resultado acá para decidir el horario de P5.
-- [ ] Más adelante, si se quieren datos del día en curso: evaluar leer también `fvposdb.log` en el parser (no hecho).
+- [ ] Esto deja de importar con la **Fase 7** (el parser lee también el `.log`). Mientras tanto, define el horario.
 
 ### P5. 🧑 Programar la publicación automática
 
@@ -277,6 +278,84 @@ Commit `9628dda`.
 
 - [ ] Si el snapshot crece mucho: detalle completo solo de los últimos 13 meses y totales ya sumados por día para la pestaña Histórico.
 - [ ] Code-splitting: hoy el bundle de Vite pesa más de 500 kB.
+
+## Fase 7: el parser lee `.script` + `.log` (datos al momento) ⬜
+
+Objetivo: que la foto incluya **todas las ventas hasta el momento de publicar**, sin depender de que el POS se cierre ni de cuándo FácilVirtual hace el checkpoint. Con esto se puede publicar cada hora.
+
+### Cómo guarda HSQLDB (verificado en el `.script` el 2026-10-14)
+
+- Es **HSQLDB 2.x** y las 28 tablas son `CREATE MEMORY TABLE`: todos los datos están en `fvposdb.script` + `fvposdb.log`. No hay archivo `.data` que leer.
+- `fvposdb.script`: el estado completo en el **último checkpoint**.
+- `fvposdb.log`: las sentencias SQL ejecutadas **después** de ese checkpoint, en orden.
+- El checkpoint (pasa el `.log` al `.script` y vacía el `.log`) ocurre al **cerrar** la base o cuando el `.log` supera **50 MB** (`SET FILES LOG SIZE 50`). `SET FILES WRITE DELAY 500 MILLIS`: el `.log` se escribe con hasta medio segundo de demora.
+
+### Formato esperado del `.log` (a confirmar con un archivo real)
+
+- Una sentencia por línea, con prefijo de sesión: `/*C3*/INSERT INTO FVPOS_ORDER VALUES(...)`.
+- `INSERT INTO <tabla> VALUES(...)`: igual que en el `.script`.
+- `DELETE FROM <tabla> WHERE <pk>=<valor>` para tablas con PK (sin PK, la condición trae todas las columnas).
+- Un `UPDATE` se registra como `DELETE` + `INSERT` de la fila completa.
+- `COMMIT` / `ROLLBACK` por sesión; también `SET SCHEMA`, `SET AUTOCOMMIT`, etc., que se ignoran.
+
+### Tareas
+
+- [ ] 🧑 **Conseguir un `.log` real**: en la PC del POS, con el POS abierto y después de varias ventas, copiar `fvposdb.script`, `fvposdb.log` y `fvposdb.properties` (copiar, no mover). Dejarlos en la Mac, por ejemplo en `~/Downloads/fv-log-muestra/`.
+  - Si se puede, hacer **una venta, una modificación y una anulación de prueba** anotando la hora, para ver cómo aparecen.
+- [ ] Confirmar el formato con la muestra: prefijos, `DELETE`/`UPDATE`, escapes de strings, sentencias de varias líneas y si hay `COMMIT` explícito con autocommit.
+- [ ] **Refactor del parser** (`src/lib/parseHSQL.js`), manteniendo `parseHSQLScript(text)` compatible:
+  1. Capa 1: leer sentencias → **filas crudas por tabla, indexadas por PK** (hoy se arman los objetos directamente).
+  2. Capa 2: aplicar el `.log` en orden sobre esas filas: `INSERT` agrega, `DELETE` quita.
+  3. Capa 3: armar `orders`, `orderLines`, `orderPayments`, etc. desde las filas finales (la lógica actual).
+  - Nueva API: `parseHSQL({ script, log })`. `parseHSQLScript(text)` pasa a ser `parseHSQL({ script: text })`.
+- [ ] **Transacciones**: guardar las sentencias de cada sesión (`/*Cn*/`) hasta su `COMMIT`; descartar con `ROLLBACK`. Lo que quede sin `COMMIT` al final del archivo no se aplica.
+- [ ] **Última línea a medio escribir**: si el archivo no termina en salto de línea, ignorar la última línea.
+- [ ] **Lectura consistente**: si ocurre un checkpoint entre la lectura del `.script` y la del `.log`, se mezclan estados. Leer los dos, volver a mirar tamaño y fecha de ambos, y si cambiaron, reintentar (hasta 3 veces). Nunca escribir ni bloquear nada en `C:\FacilVirtual\data\`: solo lectura.
+- [ ] **`export-snapshot.mjs`**: con `--db <ruta>.script` busca `<ruta>.log` al lado; si no existe, sigue solo con el `.script`. Opción `--no-log`. `meta.source` agrega `log: { size, modified }`.
+- [ ] **"Datos al …"**: usar la **última venta** incluida (`max(saleDate)`) o la fecha más nueva entre `.script` y `.log`, en vez de solo la fecha del `.script`.
+- [ ] **Electron / server local**: hoy `/api/db` manda solo el `.script`. Agregar `GET /api/snapshot`, que arme la foto en Node con `.script` + `.log` (`import()` dinámico de `src/lib/*.js`), y que el front use un solo formato en todos lados (era el "opcional" de la Fase 4).
+- [ ] **Verificación con datos reales** (la prueba clave):
+  1. Durante el día: copiar `.script` + `.log` (estado A).
+  2. Después del cierre del POS (checkpoint): copiar el `.script` nuevo (estado B, sin `.log`).
+  3. `parseHSQL(A)` tiene que coincidir con `parseHSQL(B)` para todas las órdenes hasta la hora de la copia A: mismas cantidades, totales y pagos.
+  - Dejarlo como `scripts/verify-log.mjs`.
+- [ ] Después de esta fase, revisar el horario de **P5**: se puede publicar cada hora en horario comercial (por ejemplo de 9 a 22) más una vez después del cierre.
+
+## Fase 8: rediseño del look & feel y de la estructura de los reportes ⬜
+
+Objetivo: que los reportes se vean profesionales, se lean bien en el celular (uso principal) y estén ordenados por la pregunta que responden, no por el tipo de gráfico.
+
+### Herramienta
+
+- Usar la skill **`frontend-design`** de `anthropics/skills` (`anthropics/skills@frontend-design`).
+  - [ ] Instalarla en el proyecto (`.claude/skills/`), por ejemplo con `npx skills add anthropics/skills@frontend-design`, y commitearla para que esté disponible en cualquier sesión.
+  - Para los gráficos, complementar con la skill **`dataviz`** (paleta, ejes, tooltips y modo claro/oscuro consistentes).
+
+### Tareas
+
+- [ ] **Relevamiento**: capturas actuales (celular y escritorio) de Ventas e Histórico IPC; lista de cada métrica y gráfico, qué pregunta responde y si se usa.
+- [ ] **Arquitectura de información** (propuesta inicial, a validar con el usuario):
+  - **Resumen**: hoy / ayer / semana / mes, comparados con el período anterior y el mismo período del año pasado (en pesos y ajustado por IPC).
+  - **Ventas**: evolución por día y por hora, ticket promedio y mediana, cantidad de operaciones.
+  - **Productos y categorías**: top por importe y por unidades, categorías, candidatos a promociones.
+  - **Medios de pago**: efectivo vs MercadoPago, evolución.
+  - **Caja**: aperturas y cierres, retiros, diferencias (requiere revisar las 818 ventas con monto distinto; ver pendientes de datos).
+  - **Histórico IPC**: lo actual, mejorado.
+- [ ] **Sistema de diseño**: tokens de color, tipografía, espaciado y radios en un solo lugar; modo oscuro (actual) y claro; reemplazar los estilos inline repetidos.
+- [ ] **Mobile first**: navegación inferior con pestañas en el celular, barra lateral en escritorio; selector de período cómodo con el pulgar; tarjetas de KPI legibles a 390 px.
+- [ ] **Estructura del código**: partir `ventas-dashboard.jsx` (~1.700 líneas) en:
+  - `src/lib/metrics.js`: cálculos puros (sin React), testeables.
+  - `src/components/`: tarjetas, gráficos, filtros, navegación.
+  - `src/pages/`: una página por sección.
+  - Corregir de paso los 11 errores de lint viejos.
+- [ ] **Sin cambios en los números**: antes de refactorizar, guardar las métricas de 3 o 4 rangos fijos (un día, una semana, un mes, un año) y compararlas después. Tienen que dar igual, salvo las correcciones de datos de P7.
+- [ ] **Rendimiento**: code-splitting por página (absorbe el punto de la Fase 6) y cálculos pesados memoizados o en un Web Worker si en el celular tardan.
+- [ ] Coordinar con la **Fase 5 (PWA)**: íconos, `theme_color` y pantalla de inicio con la misma identidad visual.
+- [ ] Probar en iPhone y en Android antes de publicar; publicar con `npm run publish -- --build`.
+
+### Orden sugerido
+
+P7 (datos) → Fase 7 (`.log`) → Fase 8 (rediseño) → Fase 5 (PWA, con la identidad nueva). La Fase 8 conviene después de la 7 porque el cálculo de "Datos al …" y las fuentes de datos cambian.
 
 ---
 
