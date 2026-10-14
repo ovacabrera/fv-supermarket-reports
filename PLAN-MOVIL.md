@@ -14,6 +14,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - ✅ **Funciona de punta a punta desde la Mac**: `npm run publish` genera la foto y la sube a `https://panel-ventas-fv.pages.dev`, protegido con Cloudflare Access (código por mail, grupo "Familia").
 - ✅ **Probado en iPhone**: abre los reportes sin elegir archivo, guarda la foto en el teléfono y muestra "Datos al …".
 - ⬜ **Falta la producción real**: que la **PC del POS** publique sola todos los días. Hoy los datos publicados son de la base copiada a la Mac (08/10), por eso se ven en rojo como viejos.
+- ⬜ **Repo de GitHub público**: pasarlo a privado (ver P1).
 - ⬜ Después: **Fase 7** (leer también el `.log`, para tener datos al momento) y **Fase 8** (rediseño de los reportes).
 
 ## Próximos pasos: puesta en producción
@@ -23,8 +24,10 @@ Los pasos van en orden. Los marcados 🧑 los hace el usuario (necesitan la cuen
 
 ### P1. Dejar el repo listo para la PC del POS
 
-- [ ] Hacer `git push` de los commits pendientes a GitHub (`ovacabrera/fv-supermarket-reports`), para clonarlo en la PC del POS.
-- [ ] Confirmar que el repo de GitHub es **privado** (igual no tiene datos ni secretos: `snapshot/`, `dist/`, `logs/` y `.env` están en `.gitignore`).
+- [x] `git push` a GitHub (`ovacabrera/fv-supermarket-reports`), hecho el 2026-10-14 (hasta `c7d3968`).
+- [x] Revisado que no se subieron datos ni secretos: la base, `snapshot/`, `dist/`, `logs/` y `.env` están en `.gitignore`.
+- [ ] 🧑 ⚠️ **El repo es PÚBLICO** (verificado el 2026-10-14). No tiene datos ni secretos, pero este plan incluye información del negocio (cantidad de órdenes, ticket mediano, uso de MercadoPago, montos de órdenes puntuales), la URL del panel y el nombre del equipo de Access. Los datos siguen protegidos por el login, pero se recomienda **hacerlo privado**: GitHub → repo → Settings → Danger Zone → *Change visibility* → Private.
+  - Consecuencia: en P3, el `git clone` en la PC del POS va a pedir login de GitHub (Git for Windows abre el navegador la primera vez y guarda la credencial).
 
 ### P2. 🧑 Token de API de Cloudflare (para la PC del POS)
 
@@ -42,7 +45,7 @@ En la PC del POS no conviene `wrangler login` (sesión personal que vence). Se u
 - [ ] Instalar **Node.js LTS** (nodejs.org) y **Git for Windows**.
 - [ ] Clonar el repo en una carpeta fija, por ejemplo `C:\fv-reportes`:
   `git clone https://github.com/ovacabrera/fv-supermarket-reports.git C:\fv-reportes`
-  (si el repo es privado, Git pide login de GitHub la primera vez).
+  (con el repo privado, Git pide login de GitHub la primera vez; usar la cuenta dueña del repo).
 - [ ] En esa carpeta: `npm ci`.
 - [ ] Crear `C:\fv-reportes\.env` a partir de `.env.example` con `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` y `CF_PAGES_PROJECT=panel-ventas-fv`.
 - [ ] Probar a mano: `scripts\publish-task.cmd --build`.
