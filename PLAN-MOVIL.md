@@ -146,7 +146,7 @@ Commit `9628dda`.
     `schtasks /Create /TN "FV Publicar reportes" /SC DAILY /ST 23:30 /TR "\"C:\ruta\al\repo\scripts\publish-task.cmd\""`
     Para cada hora en horario comercial: `/SC HOURLY /ST 09:00 /ET 22:00` (o configurar la repetición en la interfaz del Programador).
   - Revisar `logs\publish.log` al día siguiente.
-- [ ] **7. Verificar cómo sirve Pages el `.gz`** (necesita una sesión de Access; se hace en la Fase 4 desde el navegador): si llega con `Content-Encoding: gzip`, el navegador ya lo descomprime. El front debe mirar los primeros bytes (`1f 8b` = todavía comprimido) antes de usar `DecompressionStream`. Límite de Pages: 25 MiB por archivo; hoy 4,3 MB.
+- [x] **7. Verificar cómo sirve Pages el `.gz`** (resuelto en la Fase 4: el front detecta los dos casos) (necesita una sesión de Access; se hace en la Fase 4 desde el navegador): si llega con `Content-Encoding: gzip`, el navegador ya lo descomprime. El front debe mirar los primeros bytes (`1f 8b` = todavía comprimido) antes de usar `DecompressionStream`. Límite de Pages: 25 MiB por archivo; hoy 4,3 MB.
 
 ### Gestión de usuarios (después)
 
@@ -156,34 +156,30 @@ Commit `9628dda`.
 - Ver quién entró: **Logs → Access**.
 - iPhone: la PWA instalada tiene cookies aparte de Safari, hay que loguearse dentro de la app instalada (el PIN funciona bien ahí).
 
-## Fase 4: el front carga el snapshot ⬜
+## Fase 4: el front carga el snapshot 🟡
 
-Archivos clave:
-- `src/pages/ventas-dashboard.jsx`:
-  - `const SERVER` (línea ~20)
-  - `loadFromServer` (~1292)
-  - Carga manual con `parseHSQLScript(await file.text())` (~1343)
-  - `DBStatusBanner` (~1197)
-- `server/src/server.cjs`
-
-Tareas:
-- [ ] Nuevo `src/lib/loadSnapshot.js`:
-  1. `fetch("./data/meta.json", { cache: "no-store" })`.
-  2. Comparar `generatedAt` con la copia guardada en el teléfono.
-  3. Si hay una más nueva, bajar `./data/snapshot.json.gz`, descomprimir con `DecompressionStream("gzip")`, hacer `JSON.parse` y llamar a `decodeSnapshot`.
-- [ ] Guardar el JSON del snapshot en **IndexedDB** (envuelto en try/catch). Al abrir:
-  - Mostrar al instante la copia guardada.
-  - Después revisar `meta.json` y actualizar si cambió (stale-while-revalidate).
-  - Sin señal, mostrar lo guardado.
-- [ ] Orden de fuentes de datos en `App`:
-  1. Snapshot (`./data/`).
-  2. Server local `/api/db`, para Electron o la LAN.
-  3. Selector manual, como último recurso.
-- [ ] La URL del server local no debe romper en Cloudflare: `SERVER` hoy fuerza el puerto 3001. Usar rutas relativas o `import.meta.env`.
-- [ ] Mostrar **"Datos al: dd/mm hh:mm"** usando `meta.generatedAt` o `source.modified` (fecha de la base), y avisar si la foto tiene más de 36 h.
-- [ ] Opcional: un endpoint `GET /api/snapshot` en `server.cjs` (usando `import()` dinámico de `src/lib/*.js`, porque el server es CJS), para que Electron también use el formato compacto y el front tenga un solo formato.
-- [ ] Opcional: decodificar en un Web Worker si en el celular tarda más de 2 s.
+- [x] **`src/lib/loadSnapshot.js`**:
+  - `readCachedSnapshot()`: la última foto guardada en **IndexedDB** (base `fv-panel`, store `snapshot`, clave `current`). Guarda el `.gz` tal cual (4,3 MB) y la `meta`; al abrir lo vuelve a decodificar. Cualquier error de IndexedDB se ignora.
+  - `fetchMeta()`: `./data/meta.json` con `cache: "no-store"`. Devuelve `null` si no hay snapshot en ese origen (dev, Electron, sin red, sesión de Access vencida), si no es JSON o si la versión no coincide.
+  - `fetchSnapshot(meta)`: baja `./data/snapshot.json.gz?v=<generatedAt>`, decodifica y guarda en IndexedDB.
+  - **gzip:** mira los primeros bytes (`1f 8b`). Si llega comprimido usa `DecompressionStream("gzip")`; si el navegador ya lo descomprimió, lo lee como texto. Con `wrangler pages dev` llega como `application/gzip` sin `Content-Encoding`, o sea comprimido.
+- [x] **Orden de fuentes en `App`** (cambió respecto del plan original: el server local va primero porque lee la base en vivo):
+  1. Server local `/api/db-info` → `/api/db` (Electron, LAN). Se descarta si la respuesta no es JSON (en Cloudflare responde el `index.html`).
+  2. Snapshot: muestra al instante lo guardado en IndexedDB y después revisa `meta.json`. Si cambió `generatedAt`, baja la foto nueva.
+  3. Selector manual.
+- [x] `SERVER`: en desarrollo `http://<host>:3001`; en producción, rutas relativas (mismo origen).
+- [x] Botón **↻ Actualizar**: en modo snapshot busca una foto nueva; en modo en vivo vuelve a leer la base.
+- [x] **"Datos al dd/mm hh:mm"** en el encabezado (visible también en el celular), con `meta.source.modified`. En rojo con "hace N días" si tiene más de 36 h. Si no pudo revisar `meta.json`: "no se pudo buscar datos nuevos · Recargar" (recargar la página dispara el login de Access si la sesión venció).
+- [x] Probado en Chrome headless (CDP, ventana de 390 px) contra `wrangler pages dev`:
+  - Primera carga (descarga + decodificación): ~1,6 s en la Mac.
+  - Segunda carga desde IndexedDB: ~1,3 s.
+  - Sin `/data` disponible: muestra lo guardado con el aviso.
+  - Modo en vivo con `server.cjs`: 6,5 s (antes 26 s).
+- [x] Publicado en Cloudflare el 2026-10-14.
+- [ ] **Probar en el celular real**: primera carga, segunda carga (debería ser instantánea), modo avión, y que el selector manual ya no aparezca.
 - [ ] Probar en un iPhone real (Safari soporta `DecompressionStream` desde la versión 16.4).
+- [ ] Opcional: endpoint `GET /api/snapshot` en `server.cjs`, para que Electron use el formato compacto.
+- [ ] Opcional: decodificar en un Web Worker si en el celular tarda más de 2 s.
 
 ## Fase 5: PWA instalable ⬜
 

@@ -4,6 +4,7 @@ import {
   PieChart, Pie, Cell, Legend, ComposedChart, Line, LineChart, ReferenceLine,
 } from "recharts";
 import { parseHSQLScript } from "../lib/parseHSQL.js";
+import { readCachedSnapshot, fetchMeta, fetchSnapshot, snapshotDate } from "../lib/loadSnapshot.js";
 
 const C = {
   bg: "#0f1117", surface: "#181c27", surfaceAlt: "#1e2335", border: "#2a3050",
@@ -16,8 +17,10 @@ const DIAS_LARGO = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viern
 const MESES_NOMBRE = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const MESES_CORTO = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
-// URL base del servidor local — mismo host, puerto 3001
-const SERVER = `${window.location.protocol}//${window.location.hostname}:3001`;
+// URL base del servidor local. En desarrollo (vite) corre aparte en el puerto 3001;
+// en producción (Electron, LAN, Cloudflare) se usa el mismo origen que la página.
+const SERVER = import.meta.env.DEV ? `${window.location.protocol}//${window.location.hostname}:3001` : "";
+const SNAPSHOT_MAX_HOURS = 36;
 
 // ─── IPC INDEC hardcodeado (variación mensual %) ───────────────────────────────
 const IPC = {
@@ -1265,6 +1268,31 @@ function DBStatusBanner({ dbInfo, onManualLoad }) {
   );
 }
 
+// ─── Fecha de los datos publicados (modo snapshot) ─────────────────────────────
+function SnapshotStatus({ meta, offline }) {
+  const [ahora] = useState(() => Date.now());
+  const fecha = snapshotDate(meta);
+  const horas = (ahora - fecha.getTime()) / 36e5;
+  const vieja = horas > SNAPSHOT_MAX_HOURS;
+  const p2 = n => String(n).padStart(2, "0");
+  const fechaStr = `${p2(fecha.getDate())}/${p2(fecha.getMonth() + 1)} ${p2(fecha.getHours())}:${p2(fecha.getMinutes())}`;
+  const color = vieja ? C.red : C.green;
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginTop: 10, fontSize: 12, color, background: `${color}12`, border: `1px solid ${color}33`, borderRadius: 8, padding: "5px 10px" }}>
+      <span>{vieja ? "⚠️" : "✓"} Datos al {fechaStr}</span>
+      {vieja && <span style={{ color: C.textMuted }}>· hace {Math.floor(horas / 24)} días</span>}
+      {offline && (
+        <>
+          <span style={{ color: C.textMuted }}>· no se pudo buscar datos nuevos</span>
+          <button onClick={() => window.location.reload()} style={{ background: "none", border: "none", color: C.accent, fontSize: 12, fontWeight: 700, padding: 0 }}>
+            Recargar
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── App principal ─────────────────────────────────────────────────────────────
 export default function App() {
   const [db, setDb] = useState(null);
@@ -1273,7 +1301,12 @@ export default function App() {
   const [error, setError] = useState(null);
   const [fileName, setFileName] = useState(null);
   const [dbInfo, setDbInfo] = useState(null);
-  const [autoMode, setAutoMode] = useState(false);
+  // De dónde salen los datos: "live" (server local), "snapshot" (./data publicado) o "file" (selector manual)
+  const [source, setSource] = useState(null);
+  const [snapMeta, setSnapMeta] = useState(null);
+  const [snapOffline, setSnapOffline] = useState(false);
+  const [loadingMsg, setLoadingMsg] = useState("Cargando base de datos...");
+  const autoMode = source === "live";
   const [showManual, setShowManual] = useState(false);
   const [tab, setTab] = useState("ventas");
   const [calOpen, setCalOpen] = useState(false);
@@ -1289,45 +1322,84 @@ export default function App() {
   const [timeFrom, setTimeFrom] = useState("00:00");
   const [timeTo, setTimeTo] = useState("23:59");
 
-  const loadFromServer = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
-    try {
-      const infoRes = await fetch(`${SERVER}/api/db-info`, { signal: AbortSignal.timeout(3000) });
-      if (!infoRes.ok) throw new Error("server_down");
-      const info = await infoRes.json();
-      setDbInfo(info);
+  // Server local (Electron / LAN): lee la base del POS en vivo. Devuelve false si no hay server
+  // (en Cloudflare /api/db-info responde el index.html, no JSON).
+  const loadLive = useCallback(async () => {
+    const infoRes = await fetch(`${SERVER}/api/db-info`, { signal: AbortSignal.timeout(3000) }).catch(() => null);
+    if (!infoRes || !(infoRes.headers.get("content-type") || "").includes("json")) return false;
+    const info = await infoRes.json();
+    setDbInfo(info);
+    if (!info.found) return false;
+    setLoadingMsg("Cargando base de datos...");
+    const dbRes = await fetch(`${SERVER}/api/db`, { signal: AbortSignal.timeout(30000) });
+    if (!dbRes.ok) throw new Error("fetch_failed");
+    setDb(parseHSQLScript(await dbRes.text()));
+    setSource("live");
+    setShowManual(false);
+    setFileName(info.path);
+    return true;
+  }, []);
 
-      if (info.found) {
-        const dbRes = await fetch(`${SERVER}/api/db`, { signal: AbortSignal.timeout(30000) });
-        if (!dbRes.ok) throw new Error("fetch_failed");
-        const text = await dbRes.text();
-        setDb(parseHSQLScript(text));
-        setAutoMode(true);
-        setShowManual(false);
-        setFileName(info.path);
-      } else if (!isRefresh) {
-        setShowManual(true);
-      } else {
-        setError("No se encontró el archivo de base de datos en el servidor.");
-      }
-    } catch {
-      if (isRefresh) {
-        setError("No se pudo actualizar. Verificá que el servidor esté en ejecución.");
-      } else {
-        setDbInfo({ found: false, path: null });
-        setShowManual(true);
-      }
-    } finally {
-      if (isRefresh) setRefreshing(false);
-      else setLoading(false);
+  // Snapshot publicado: si hay una foto más nueva que `current`, la baja.
+  // Devuelve false si no hay snapshot disponible (ni publicado ni guardado).
+  const loadSnapshot = useCallback(async (current) => {
+    const meta = await fetchMeta();
+    if (!meta) { setSnapOffline(!!current); return !!current; }
+    if (current?.generatedAt === meta.generatedAt) { setSnapOffline(false); return true; }
+    try {
+      setLoadingMsg("Descargando datos...");
+      const snap = await fetchSnapshot(meta);
+      setDb(snap.db);
+      setSnapMeta(snap.meta);
+      setSource("snapshot");
+      setShowManual(false);
+      setSnapOffline(false);
+      return true;
+    } catch (e) {
+      if (!current) throw e;
+      setSnapOffline(true);
+      return true;
     }
   }, []);
 
+  // Orden de fuentes: server local (datos en vivo) → snapshot (lo guardado al instante, después
+  // busca uno nuevo) → selector manual.
   useEffect(() => {
-    loadFromServer(false);
-  }, [loadFromServer]);
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        if (await loadLive()) return;
+        const cached = await readCachedSnapshot();
+        if (cached) {
+          setDb(cached.db);
+          setSnapMeta(cached.meta);
+          setSource("snapshot");
+          setLoading(false);
+        }
+        if (await loadSnapshot(cached?.meta)) return;
+        setShowManual(true);
+      } catch (e) {
+        setError("No se pudieron cargar los datos: " + e.message);
+        setShowManual(true);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [loadLive, loadSnapshot]);
+
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      if (source === "snapshot") await loadSnapshot(snapMeta);
+      else if (!(await loadLive())) setError("No se pudo actualizar. Verificá que el servidor esté en ejecución.");
+    } catch {
+      setError("No se pudo actualizar.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [source, snapMeta, loadSnapshot, loadLive]);
 
   useEffect(() => {
     function handler(e) { if (calRef.current && !calRef.current.contains(e.target)) setCalOpen(false); }
@@ -1341,7 +1413,7 @@ export default function App() {
     try {
       if (file.name.endsWith(".7z") || file.name.endsWith(".zip")) { setError("Descomprimí el .7z y subí fvposdb.script."); setLoading(false); return; }
       setDb(parseHSQLScript(await file.text()));
-      setAutoMode(false);
+      setSource("file");
       setShowManual(false);
     } catch (e) { setError("Error: " + e.message); }
     setLoading(false);
@@ -1572,7 +1644,7 @@ export default function App() {
             {loading && (
               <div style={{ textAlign: "center", padding: 60, color: C.textMuted }}>
                 <div style={{ fontSize: 28, marginBottom: 10 }}>⏳</div>
-                Cargando base de datos...
+                {loadingMsg}
               </div>
             )}
             {error && (
@@ -1604,6 +1676,7 @@ export default function App() {
                 {pageMeta.title}
               </h1>
               <p style={{ fontSize: 14, color: C.textMuted, maxWidth: 560 }}>{pageMeta.description}</p>
+              {source === "snapshot" && snapMeta && <SnapshotStatus meta={snapMeta} offline={snapOffline} />}
             </header>
 
             {tab === "ventas" && (
@@ -1622,7 +1695,7 @@ export default function App() {
                 setTimeTo={setTimeTo}
                 today={today}
                 ayer={ayer}
-                onRefresh={() => loadFromServer(true)}
+                onRefresh={refresh}
                 refreshing={refreshing}
                 isDesktop={isDesktop}
               />
