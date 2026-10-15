@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { parseHSQLScript } from "./lib/parseHSQL.js";
-import { readCachedSnapshot, fetchMeta, fetchSnapshot, snapshotDate } from "./lib/loadSnapshot.js";
+import { parseHSQL } from "./lib/parseHSQL.js";
+import { readCachedSnapshot, fetchMeta, fetchSnapshot, fetchLiveSnapshot, snapshotDate } from "./lib/loadSnapshot.js";
 import { filterOrders, computeMetrics, lastSaleDate, paymentRanking } from "./lib/metrics.js";
 import { addDays, toYMD } from "./lib/dates.js";
 import { SECTIONS } from "./lib/sections.js";
@@ -66,10 +66,10 @@ function StartScreen({ loading, loadingMsg, showManual, dbInfo, error, onPick, o
             )}
             <button type="button" className={`drop${over ? " is-over" : ""}`} onClick={onPick}
               onDragOver={e => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
-              onDrop={e => { e.preventDefault(); setOver(false); onDropFile(e.dataTransfer?.files?.[0]); }}>
+              onDrop={e => { e.preventDefault(); setOver(false); onDropFile(e.dataTransfer?.files); }}>
               <Icon name="file" size={32} />
               <div className="drop__title">Elegir fvposdb.script</div>
-              <div className="drop__text">Tocá para buscarlo o arrastralo acá</div>
+              <div className="drop__text">Tocá para buscarlo o arrastralo acá. Si está, sumá también fvposdb.log (las ventas del día).</div>
             </button>
           </>
         )}
@@ -119,9 +119,8 @@ export default function App() {
     setDbInfo(info);
     if (!info.found) return false;
     setLoadingMsg("Leyendo la base del POS…");
-    const dbRes = await fetch(`${SERVER}/api/db`, { signal: AbortSignal.timeout(30000) });
-    if (!dbRes.ok) throw new Error("fetch_failed");
-    setDb(parseHSQLScript(await dbRes.text()));
+    const snap = await fetchLiveSnapshot(`${SERVER}/api/snapshot`);
+    setDb(snap.db);
     setSource("live");
     setShowManual(false);
     setFileName(info.path);
@@ -189,13 +188,19 @@ export default function App() {
     }
   }, [source, snapMeta, loadSnapshot, loadLive]);
 
-  const handleFile = useCallback(async (file) => {
-    if (!file) return;
-    setLoading(true); setError(null); setFileName(file.name);
+  // Acepta el .script solo o junto con el .log (selección múltiple o arrastrando los dos).
+  const handleFile = useCallback(async (fileList) => {
+    const files = [...(fileList || [])];
+    if (files.length === 0) return;
+    const scriptFile = files.find(f => f.name.endsWith(".script"));
+    const logFile = files.find(f => f.name.endsWith(".log"));
+    setLoading(true); setError(null);
     try {
-      if (file.name.endsWith(".7z") || file.name.endsWith(".zip")) { setError("Descomprimí el .7z y elegí fvposdb.script."); setLoading(false); return; }
+      if (files.some(f => f.name.endsWith(".7z") || f.name.endsWith(".zip"))) { setError("Descomprimí el .7z y elegí fvposdb.script (y fvposdb.log, si está)."); setLoading(false); return; }
+      if (!scriptFile) { setError("Falta fvposdb.script: el .log solo no alcanza."); setLoading(false); return; }
+      setFileName(logFile ? `${scriptFile.name} + ${logFile.name}` : scriptFile.name);
       setLoadingMsg("Leyendo el archivo…");
-      setDb(parseHSQLScript(await file.text()));
+      setDb(parseHSQL({ script: await scriptFile.text(), log: logFile ? await logFile.text() : null }));
       setSource("file");
       setShowManual(false);
     } catch (e) { setError("No se pudo leer el archivo: " + e.message); }
@@ -207,7 +212,7 @@ export default function App() {
   const paymentOrder = useMemo(() => db ? paymentRanking(db) : [], [db]);
   const lastSale = useMemo(() => db ? lastSaleDate(db) : null, [db]);
 
-  const fileInput = <input ref={fileRef} type="file" hidden onChange={e => handleFile(e.target.files?.[0])} />;
+  const fileInput = <input ref={fileRef} type="file" multiple hidden onChange={e => handleFile(e.target.files)} />;
 
   if (!db) {
     return (

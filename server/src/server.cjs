@@ -3,14 +3,19 @@ const fs      = require("fs");
 const path    = require("path");
 const os      = require("os");
 const http    = require("http");
+const zlib    = require("zlib");
+const { pathToFileURL } = require("url");
  
 const app  = express();
 const PORT = 3001;
  
-// ─── Ruta al archivo según plataforma ────────────────────────────────────────
-const DB_PATH = process.platform === "win32"
+// ─── Ruta al archivo según plataforma (o FV_DB_PATH) ─────────────────────────
+const DB_PATH = process.env.FV_DB_PATH || (process.platform === "win32"
   ? "C:\\FacilVirtual\\data\\fvposdb.script"
-  : path.join(os.homedir(), "Downloads", "fvposdb.script");
+  : path.join(os.homedir(), "Downloads", "fvposdb.script"));
+
+// Parser, snapshot y lectura de la base son ESM (los mismos que usa scripts/export-snapshot.mjs).
+const esm = file => import(pathToFileURL(path.join(__dirname, file)).href);
  
 // ─── CORS: permite acceso desde cualquier origen (iPhone en WiFi incluido) ───
 app.use((req, res, next) => {
@@ -25,32 +30,41 @@ const DIST_PATH = path.join(__dirname, "../../dist");
 app.use(express.static(DIST_PATH));
  
 // ─── Endpoint: info del archivo DB ───────────────────────────────────────────
-app.get("/api/db-info", (req, res) => {
+// `modified` es la escritura más nueva entre el .script y el .log.
+app.get("/api/db-info", async (req, res) => {
   try {
     if (!fs.existsSync(DB_PATH)) {
       return res.status(404).json({ found: false, path: DB_PATH });
     }
+    const { logPathFor } = await esm("readPosDb.mjs");
     const stat = fs.statSync(DB_PATH);
+    const logStat = fs.existsSync(logPathFor(DB_PATH)) ? fs.statSync(logPathFor(DB_PATH)) : null;
+    const modified = logStat && logStat.mtime > stat.mtime ? logStat.mtime : stat.mtime;
     res.json({
       found:    true,
       path:     DB_PATH,
       size:     stat.size,
-      modified: stat.mtime.toISOString(),
+      modified: modified.toISOString(),
+      log:      logStat ? { size: logStat.size, modified: logStat.mtime.toISOString() } : null,
     });
   } catch (e) {
     res.status(500).json({ found: false, error: e.message });
   }
 });
  
-// ─── Endpoint: contenido del archivo DB ──────────────────────────────────────
-app.get("/api/db", (req, res) => {
+// ─── Endpoint: foto de la base (.script + .log), en el mismo formato que la publicada ──
+app.get("/api/snapshot", async (req, res) => {
   try {
     if (!fs.existsSync(DB_PATH)) {
       return res.status(404).json({ error: "Archivo no encontrado", path: DB_PATH });
     }
-    const content = fs.readFileSync(DB_PATH, "utf8");
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.send(content);
+    const [{ readPosDb }, { parseHSQL }, { encodeSnapshot }] = await Promise.all([
+      esm("readPosDb.mjs"), esm("../../src/lib/parseHSQL.js"), esm("../../src/lib/snapshot.js"),
+    ]);
+    const { script, log, source } = readPosDb(DB_PATH);
+    const gz = zlib.gzipSync(JSON.stringify(encodeSnapshot(parseHSQL({ script, log }), source)));
+    res.setHeader("Content-Type", "application/gzip");
+    res.send(gz);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

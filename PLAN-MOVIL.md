@@ -2,21 +2,22 @@
 
 > Documento de traspaso para seguir el trabajo en otra sesión de chat.
 > Marcado: `[x]` hecho y commiteado · `[ ]` pendiente.
-> Última actualización: 2026-10-14.
+> Última actualización: 2026-10-15.
 
 ## Objetivo
 
 El usuario abre la app en el celular y **ve los reportes enseguida**, sin elegir ningún archivo.
 Los datos salen de la última "foto" de la base del POS, ya procesada.
 
-## Estado actual (2026-10-14)
+## Estado actual (2026-10-15)
 
 - ✅ **Funciona de punta a punta desde la Mac**: `npm run publish` genera la foto y la sube a `https://panel-ventas-fv.pages.dev`, protegido con Cloudflare Access (código por mail, grupo "Familia").
 - ✅ **Probado en iPhone**: abre los reportes sin elegir archivo, guarda la foto en el teléfono y muestra "Datos al …".
 - ✅ **Rediseño publicado (Fase 8)**: reportes nuevos, pensados para el celular, probados en iPhone y Android el 2026-10-14.
-- ⬜ **Falta la producción real**: que la **PC del POS** publique sola todos los días. Hoy los datos publicados son de la base copiada a la Mac (13/10), y se ven en rojo como viejos cuando pasan más de 36 h.
+- ⬜ **Falta la producción real**: que la **PC del POS** publique sola todos los días. Hoy los datos publicados son de una copia de la base del 15/10 a las 20:34, hecha a mano, y se ven en rojo como viejos cuando pasan más de 36 h.
 - ⬜ **Repo de GitHub público**: pasarlo a privado (ver P1).
-- ⬜ Después: **Fase 7** (leer también el `.log`, para tener datos al momento) y **Fase 5** (PWA, con la identidad visual nueva).
+- 🟡 **Fase 7 (leer también el `.log`)**: hecha en el repo y publicada el 2026-10-15 con las ventas del día incluidas. Falta la verificación contra el checkpoint del día siguiente.
+- ⬜ Después: **Fase 5** (PWA, con la identidad visual nueva).
 
 ## Próximos pasos: puesta en producción
 
@@ -54,23 +55,22 @@ En la PC del POS no conviene `wrangler login` (sesión personal que vence). Se u
   - En el celular, **↻ Actualizar**: "Datos al …" tiene que mostrar la fecha de la base del POS, en verde.
   - Si falla, mirar `C:\fv-reportes\logs\publish.log`.
 
-### P4. 🧑 Verificar cuándo se actualiza `fvposdb.script` (define el horario)
+### P4. Cuándo se actualiza `fvposdb.script` ✅ (respondido el 2026-10-15 con los logs del POS)
 
-HSQLDB guarda los cambios recientes en `fvposdb.log` y recién los pasa a `fvposdb.script` en un *checkpoint* (normalmente al cerrar el POS). La app solo lee el `.script`.
+HSQLDB guarda los cambios recientes en `fvposdb.log` y recién los pasa a `fvposdb.script` en un *checkpoint*.
 
-- [ ] Durante el día, con el POS abierto, mirar en `C:\FacilVirtual\data\` la fecha de modificación de `fvposdb.script` y de `fvposdb.log`.
-  - Si el `.script` **no cambia en todo el día** y el `.log` sí: publicar una vez al día, **después del cierre del POS**. Publicar cada hora no sumaría nada.
-  - Si el `.script` se actualiza durante el día: se puede publicar cada hora en horario comercial.
-- [ ] Anotar el resultado acá para decidir el horario de P5.
-- [ ] Esto deja de importar con la **Fase 7** (el parser lee también el `.log`). Mientras tanto, define el horario.
+- [x] **FácilVirtual hace el checkpoint al arrancar** (alrededor de las 09:10), no al cerrar. En `logs\fvpos.log.<fecha>` aparece `checkpointClose start … checkpointClose end`, seguido de `Stopping HSQL server...` y `Starting HSQL server...`. Visto el 1, 3, 5, 11, 12, 13 y 15/10. Al cerrar no aparece ningún checkpoint.
+  - Consecuencia: durante el día, y también a la noche después del cierre, el `.script` llega solo hasta el día anterior. **Las ventas del día están únicamente en `fvposdb.log`** hasta el próximo arranque.
+- [x] Con la **Fase 7** el horario ya no depende de esto: se puede publicar cada hora con el POS abierto (ver P5). Sin la Fase 7, la única opción era publicar a la mañana, después de abrir el POS, con los datos del día anterior.
 
 ### P5. 🧑 Programar la publicación automática
 
 Con el **Programador de tareas** (interfaz gráfica, para tener todas las opciones):
 
 - [ ] Crear tarea básica → nombre "FV Publicar reportes".
-- [ ] Desencadenador: **diario**, a una hora en la que el POS ya cerró y la PC sigue encendida (por ejemplo 23:30; ajustar según P4).
-  - Si la PC se apaga al cerrar, elegir una hora en que esté prendida (por ejemplo a la mañana, al abrir: publica los datos del día anterior).
+- [ ] Desencadenador: **diario a las 09:30, repetir cada 1 hora durante 13 horas** (hasta las 22:30). Con la Fase 7, cada publicación incluye las ventas del día hasta ese momento.
+  - Son ~13 deploys por día (~400 por mes). El plan gratis de Cloudflare Pages tiene un límite de 500 *builds* por mes. No está confirmado si cuenta los deploys hechos con `wrangler`: revisarlo antes de subir la frecuencia.
+  - Si la PC queda prendida después del cierre, sumar una ejecución a las 23:00 para tener el día completo.
 - [ ] Acción: iniciar programa `C:\fv-reportes\scripts\publish-task.cmd`.
 - [ ] En Propiedades:
   - General: "Ejecutar solo cuando el usuario haya iniciado sesión" (más simple, no pide contraseña) si la PC queda con sesión abierta. Si no, "Ejecutar tanto si el usuario inició sesión como si no".
@@ -80,7 +80,7 @@ Con el **Programador de tareas** (interfaz gráfica, para tener todas las opcion
 - [ ] Al día siguiente, confirmar en el celular que "Datos al …" muestra la fecha nueva.
 
 Alternativa por consola (sin las opciones de "lo antes posible"):
-`schtasks /Create /TN "FV Publicar reportes" /SC DAILY /ST 23:30 /TR "C:\fv-reportes\scripts\publish-task.cmd"`
+`schtasks /Create /TN "FV Publicar reportes" /SC DAILY /ST 09:30 /RI 60 /DU 13:00 /TR "C:\fv-reportes\scripts\publish-task.cmd"`
 
 ### P6. 🧑 Dar acceso a los usuarios
 
@@ -283,47 +283,52 @@ Commit `9628dda`.
 - [ ] Si el snapshot crece mucho: detalle completo solo de los últimos 13 meses y totales ya sumados por día para la pestaña Histórico.
 - [ ] Code-splitting: hoy el bundle de Vite pesa más de 500 kB.
 
-## Fase 7: el parser lee `.script` + `.log` (datos al momento) ⬜
+## Fase 7: el parser lee `.script` + `.log` (datos al momento) 🟡 (hecha y publicada; falta la verificación con el checkpoint)
 
-Objetivo: que la foto incluya **todas las ventas hasta el momento de publicar**, sin depender de que el POS se cierre ni de cuándo FácilVirtual hace el checkpoint. Con esto se puede publicar cada hora.
+Objetivo: que la foto incluya **todas las ventas hasta el momento de publicar**, sin depender de cuándo FácilVirtual hace el checkpoint (lo hace al arrancar, ver P4). Con esto se puede publicar cada hora.
 
 ### Cómo guarda HSQLDB (verificado en el `.script` el 2026-10-14)
 
 - Es **HSQLDB 2.x** y las 28 tablas son `CREATE MEMORY TABLE`: todos los datos están en `fvposdb.script` + `fvposdb.log`. No hay archivo `.data` que leer.
 - `fvposdb.script`: el estado completo en el **último checkpoint**.
 - `fvposdb.log`: las sentencias SQL ejecutadas **después** de ese checkpoint, en orden.
-- El checkpoint (pasa el `.log` al `.script` y vacía el `.log`) ocurre al **cerrar** la base o cuando el `.log` supera **50 MB** (`SET FILES LOG SIZE 50`). `SET FILES WRITE DELAY 500 MILLIS`: el `.log` se escribe con hasta medio segundo de demora.
+- El checkpoint (pasa el `.log` al `.script` y vacía el `.log`) ocurre al **abrir** la base (FácilVirtual lo hace en cada arranque) o cuando el `.log` supera **50 MB** (`SET FILES LOG SIZE 50`). `SET FILES WRITE DELAY 500 MILLIS`: el `.log` se escribe con hasta medio segundo de demora.
 
-### Formato esperado del `.log` (a confirmar con un archivo real)
+### Formato del `.log` (confirmado con un `.log` real del 2026-10-15: 1.549 líneas, 76 ventas)
 
-- Una sentencia por línea, con prefijo de sesión: `/*C3*/INSERT INTO FVPOS_ORDER VALUES(...)`.
-- `INSERT INTO <tabla> VALUES(...)`: igual que en el `.script`.
-- `DELETE FROM <tabla> WHERE <pk>=<valor>` para tablas con PK (sin PK, la condición trae todas las columnas).
-- Un `UPDATE` se registra como `DELETE` + `INSERT` de la fila completa.
-- `COMMIT` / `ROLLBACK` por sesión; también `SET SCHEMA`, `SET AUTOCOMMIT`, etc., que se ignoran.
+- Una sentencia por línea, fin de línea **CRLF**, ninguna en varias líneas. El archivo termina con salto de línea.
+- `INSERT INTO <tabla> VALUES(...)`: igual que en el `.script`, con los mismos escapes `\u00e1`.
+- `DELETE FROM <tabla> WHERE <pk>=<valor>`. Todas las tablas que usa el reporte tienen la PK en la primera columna.
+- Un `UPDATE` se registra como `DELETE` + `INSERT` de la fila completa. Así aparecen productos, precios, `APP_CONFIG` y `WORKSTATION_CONFIG` (el saldo de caja, en cada venta).
+- **Prefijo de sesión `/*C5*/` solo cuando cambia la sesión**: las líneas sin prefijo son de la última sesión nombrada. Ese día trabajaron dos sesiones (C5 y C6) alternándose.
+- `COMMIT` explícito al final de cada transacción (408 ese día). No hubo `ROLLBACK`.
+- Las ventas entran como `INSERT` de `FVPOS_ORDER` + `FVPOS_ORDER_LINE` + `FVPOS_CASH_OPERATION`. Las órdenes del `.log` siguen sin huecos a la última del `.script` (148981 → 148982).
+- ❓ No hubo ninguna anulación ni modificación de venta: falta ver cómo aparecen (ver pendientes).
+- La copia del `.log` se puede hacer a mano con el POS abierto (Explorador o `copy`). El backup con 7-Zip lo descarta porque está en uso.
 
 ### Tareas
 
-- [ ] 🧑 **Conseguir un `.log` real**: en la PC del POS, con el POS abierto y después de varias ventas, copiar `fvposdb.script`, `fvposdb.log` y `fvposdb.properties` (copiar, no mover). Dejarlos en la Mac, por ejemplo en `~/Downloads/fv-log-muestra/`.
-  - Si se puede, hacer **una venta, una modificación y una anulación de prueba** anotando la hora, para ver cómo aparecen.
-- [ ] Confirmar el formato con la muestra: prefijos, `DELETE`/`UPDATE`, escapes de strings, sentencias de varias líneas y si hay `COMMIT` explícito con autocommit.
-- [ ] **Refactor del parser** (`src/lib/parseHSQL.js`), manteniendo `parseHSQLScript(text)` compatible:
-  1. Capa 1: leer sentencias → **filas crudas por tabla, indexadas por PK** (hoy se arman los objetos directamente).
-  2. Capa 2: aplicar el `.log` en orden sobre esas filas: `INSERT` agrega, `DELETE` quita.
-  3. Capa 3: armar `orders`, `orderLines`, `orderPayments`, etc. desde las filas finales (la lógica actual).
-  - Nueva API: `parseHSQL({ script, log })`. `parseHSQLScript(text)` pasa a ser `parseHSQL({ script: text })`.
-- [ ] **Transacciones**: guardar las sentencias de cada sesión (`/*Cn*/`) hasta su `COMMIT`; descartar con `ROLLBACK`. Lo que quede sin `COMMIT` al final del archivo no se aplica.
-- [ ] **Última línea a medio escribir**: si el archivo no termina en salto de línea, ignorar la última línea.
-- [ ] **Lectura consistente**: si ocurre un checkpoint entre la lectura del `.script` y la del `.log`, se mezclan estados. Leer los dos, volver a mirar tamaño y fecha de ambos, y si cambiaron, reintentar (hasta 3 veces). Nunca escribir ni bloquear nada en `C:\FacilVirtual\data\`: solo lectura.
-- [ ] **`export-snapshot.mjs`**: con `--db <ruta>.script` busca `<ruta>.log` al lado; si no existe, sigue solo con el `.script`. Opción `--no-log`. `meta.source` agrega `log: { size, modified }`.
-- [ ] **"Datos al …"**: usar la **última venta** incluida (`max(saleDate)`) o la fecha más nueva entre `.script` y `.log`, en vez de solo la fecha del `.script`.
-- [ ] **Electron / server local**: hoy `/api/db` manda solo el `.script`. Agregar `GET /api/snapshot`, que arme la foto en Node con `.script` + `.log` (`import()` dinámico de `src/lib/*.js`), y que el front use un solo formato en todos lados (era el "opcional" de la Fase 4).
-- [ ] **Verificación con datos reales** (la prueba clave):
-  1. Durante el día: copiar `.script` + `.log` (estado A).
-  2. Después del cierre del POS (checkpoint): copiar el `.script` nuevo (estado B, sin `.log`).
-  3. `parseHSQL(A)` tiene que coincidir con `parseHSQL(B)` para todas las órdenes hasta la hora de la copia A: mismas cantidades, totales y pagos.
-  - Dejarlo como `scripts/verify-log.mjs`.
-- [ ] Después de esta fase, revisar el horario de **P5**: se puede publicar cada hora en horario comercial (por ejemplo de 9 a 22) más una vez después del cierre.
+- [x] Conseguir un `.log` real: copia del 2026-10-15 a las 20:34 (en la Mac, `~/Downloads/fvposdb.tmp/`).
+- [x] Confirmar el formato con la muestra (ver arriba).
+- [x] **Refactor del parser** (`src/lib/parseHSQL.js`): capa 1, sentencias → filas crudas por tabla indexadas por PK; capa 2, el `.log` aplicado en orden; capa 3, `orders`, `orderLines`, etc. (la lógica de antes).
+  - Nueva API: `parseHSQL({ script, log }, info?)`. `info` devuelve lo aplicado del `.log` y las advertencias. `parseHSQLScript(text)` sigue andando.
+  - Con solo el `.script` da **idéntico** al parser anterior (comparado en las bases del 13/10 y del 15/10), un 10% más lento (~4 s).
+  - Una fila modificada vuelve a su lugar por PK, como en el `.script`.
+- [x] **Transacciones**: las sentencias de cada sesión se guardan hasta su `COMMIT`. `ROLLBACK` las descarta, y lo que queda sin `COMMIT` al final no se aplica (`ROLLBACK TO SAVEPOINT` descarta la transacción entera y avisa).
+- [x] **Última línea a medio escribir**: si el archivo no termina en salto de línea, la última línea se ignora.
+- [x] **Lectura consistente** (`server/src/readPosDb.mjs`): lee los dos archivos y vuelve a mirarlos. Si el `.script` cambió o el `.log` se achicó (hubo un checkpoint en el medio), reintenta hasta 3 veces. Que el `.log` crezca mientras se lee es normal. Solo lectura.
+- [x] **`export-snapshot.mjs`**: con `--db <ruta>.script` busca `<ruta>.log` al lado; si no existe, sigue solo con el `.script`. Opción `--no-log`. `meta.source` agrega `script: { size, modified }` y `log: { size, modified }`.
+- [x] **"Datos al …"**: `meta.source.modified` pasa a ser la escritura más nueva entre el `.script` y el `.log`. Con la muestra da 20:34, la hora de la última venta.
+- [x] **Electron / server local**: `/api/db` (mandaba el `.script` crudo) se reemplazó por `GET /api/snapshot`, que arma la foto en Node con `.script` + `.log`, en el mismo formato que la publicada. `/api/db-info` informa también el `.log`. `FV_DB_PATH` permite usar otra ruta. El build de Electron incluye `src/lib/`.
+- [x] **Selector manual**: acepta el `.script` solo o junto con el `.log` (selección múltiple o arrastrando los dos).
+- [x] Pruebas: `scripts/test-parse-log.mjs` cubre los casos que la muestra no trae (rollback, sesiones intercaladas, modificación y anulación, sin `COMMIT`, línea cortada).
+- [x] Publicado el 2026-10-15 con la copia de las 20:34: 76 ventas del día ($1.082.081) que el `.script` solo no tenía.
+- [ ] 🧑 **Verificación con datos reales** (`scripts/verify-log.mjs`, la prueba clave):
+  1. Estado A: la copia del 15/10 a las 20:34 (`.script` + `.log`), ya está.
+  2. Estado B: el 16/10, **después de que arranque el POS** (~09:15), copiar el `fvposdb.script` nuevo (el checkpoint ya pasó el `.log` al `.script`). Si se puede, hacer antes **una anulación y una modificación de prueba** el día de la copia A, anotando la hora.
+  3. `node scripts/verify-log.mjs <A>/fvposdb.script <B>/fvposdb.script`: tiene que dar ✓ en órdenes, líneas, pagos y caja hasta la última orden de A.
+- [ ] 🧑 Probar en la PC del POS que Node puede leer `fvposdb.log` con el POS abierto (7-Zip falla con ese archivo; el Explorador puede copiarlo). Si falla, `publish.log` lo muestra.
+- [x] Horario de **P5** revisado: cada hora de 9:30 a 22:30.
 
 ## Fase 8: rediseño del look & feel y de la estructura de los reportes ✅ (publicado y probado en iPhone y Android el 2026-10-14)
 
@@ -371,12 +376,18 @@ P7 (datos) → Fase 7 (`.log`) → Fase 8 (rediseño) → Fase 5 (PWA, con la id
   - Opción: contar 1 unidad por línea cuando PRICE = 1.
 - [ ] **818 ventas en caja** donde `operationAmount` es distinto del total de la orden. Seguramente son pagos mixtos (parte efectivo, parte MercadoPago). Revisarlas antes de armar un reporte de caja.
 - [ ] **4 órdenes** donde la suma de pagos no coincide con el total: ids 120062, 120119, 120196 y 120288 (pagos menores al total).
+- [ ] **Cómo aparecen en el `.log` las anulaciones y modificaciones de ventas.** En la muestra del 15/10 no hubo ninguna: solo `INSERT` de órdenes y ningún `DELETE` sobre `FVPOS_ORDER`, `FVPOS_ORDER_LINE` ni `FVPOS_CASH_OPERATION`. Se supone `DELETE` + `INSERT` con otro `STATUS` (el parser ya lo soporta y está probado con datos armados), pero falta confirmarlo con un caso real. Puede ser también un `DELETE` de líneas o de la operación de caja, o un `DELETE` sin PK (`… AND …`). Este último no se aplica y aparece como ⚠ en la salida de `export-snapshot`.
+  - Cómo: anular y modificar una venta de prueba con el POS abierto, anotar la hora y copiar el `.log`. Buscar `ORDER_ID=<id>` en el archivo.
+- [ ] 📝 **Nota personal, fuera del plan: el backup diario no incluye `fvposdb.log`.** El 7-Zip del backup descarta `fvposdb.log` y `fvposdb.lck` porque el POS los tiene abiertos. Cada backup hecho con el POS abierto pierde lo vendido desde el último arranque hasta la hora del backup: si hubiera que restaurarlo, faltarían esas ventas. La app no depende de este backup.
+  - Arreglo: agregar `-ssw` al comando de 7-Zip (comprime también los archivos abiertos para escritura), o copiar primero `data\` a una carpeta temporal y comprimir la copia (lo que se hizo a mano el 15/10). El `.lck` no hace falta.
+  - Comprobar después que el `.7z` contenga `fvposdb.log`.
 - [x] Lint: `ventas-dashboard.jsx` tenía 11 errores de antes de este plan (variables sin usar, "Cannot create components during render"). No se tocaron. El de "setState dentro de un effect" desapareció al reescribir la carga en la Fase 4.
 
 ## Cómo verificar cambios en el parser o el snapshot
 
 ```bash
 npm run snapshot        # debe terminar con "✓ Snapshot generado" y mostrar las cantidades
+node scripts/test-parse-log.mjs   # casos del .log armados a mano
 npm run build
 npx eslint src/lib scripts
 ```

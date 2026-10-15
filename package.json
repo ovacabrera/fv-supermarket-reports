@@ -15,6 +15,7 @@
       "!dist/data/**",
       "electron/**/*",
       "server/**/*",
+      "src/lib/**/*",
       "package.json"
     ],
     "win": {

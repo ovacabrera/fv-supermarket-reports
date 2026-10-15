@@ -82,6 +82,13 @@ export async function fetchSnapshot(meta) {
   return snap;
 }
 
+// Foto armada en el momento por el server local (Electron / LAN) con .script + .log. No se guarda.
+export async function fetchLiveSnapshot(url) {
+  const res = await fetch(url, { signal: AbortSignal.timeout(60000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return bytesToSnapshot(await res.arrayBuffer());
+}
+
 // Antigüedad de la foto: fecha de la base del POS (o de generación, si no viene).
 export function snapshotDate(meta) {
   return new Date(meta?.source?.modified || meta?.generatedAt);

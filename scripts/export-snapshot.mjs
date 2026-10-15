@@ -1,6 +1,8 @@
 // Genera el snapshot pre-procesado de la base del POS.
 //
-//   node scripts/export-snapshot.mjs [--db <ruta .script>] [--out <carpeta>]
+//   node scripts/export-snapshot.mjs [--db <ruta .script>] [--out <carpeta>] [--no-log]
+//
+// Lee también <ruta>.log, si está al lado (las ventas desde el último checkpoint). --no-log lo ignora.
 //
 // Escribe en la carpeta de salida (por defecto ./snapshot):
 //   snapshot.json.gz  datos compactos (ver src/lib/snapshot.js)
@@ -11,8 +13,9 @@ import path from "path";
 import os from "os";
 import zlib from "zlib";
 import { fileURLToPath } from "url";
-import { parseHSQLScript } from "../src/lib/parseHSQL.js";
+import { parseHSQL } from "../src/lib/parseHSQL.js";
 import { encodeSnapshot } from "../src/lib/snapshot.js";
+import { readPosDb } from "../server/src/readPosDb.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -44,13 +47,17 @@ if (!fs.existsSync(dbPath)) {
 }
 
 const t0 = Date.now();
-const stat = fs.statSync(dbPath);
-console.log(`Leyendo ${dbPath} (${mb(stat.size)})…`);
+console.log(`Leyendo ${dbPath} (${mb(fs.statSync(dbPath).size)})…`);
+const { script, log, source } = readPosDb(dbPath, { log: !process.argv.includes("--no-log") });
+console.log(source.log ? `  + ${path.basename(dbPath, ".script")}.log (${mb(source.log.size)}, modificado ${source.log.modified})` : "  sin .log: solo el .script");
 
-const db = parseHSQLScript(fs.readFileSync(dbPath, "utf8"));
+const info = {};
+const db = parseHSQL({ script, log }, info);
 const t1 = Date.now();
+if (info.log) console.log(`  .log: ${info.log.statements} sentencias, ${info.log.commits} COMMIT, ${info.log.rollbacks} ROLLBACK, ${info.log.uncommitted} sin confirmar${info.log.partialLine ? ", última línea cortada" : ""}`);
+for (const w of info.warnings) console.warn(`  ⚠ ${w}`);
 
-const snap = encodeSnapshot(db, { file: path.basename(dbPath), size: stat.size, modified: stat.mtime.toISOString() });
+const snap = encodeSnapshot(db, source);
 const json = JSON.stringify(snap);
 const gz = zlib.gzipSync(json, { level: 9 });
 const t2 = Date.now();

@@ -28,10 +28,10 @@ Electron
 Express (localhost:3001)
    ├── Frontend React (build Vite)
    ├── GET /api/db-info
-   └── GET /api/db
+   └── GET /api/snapshot
            │
            ▼
-      fvposdb.script
+      fvposdb.script + fvposdb.log
 ```
 
 ## Tecnologías
@@ -136,17 +136,20 @@ Respuesta:
   "found": true,
   "path": "...",
   "size": 12345,
-  "modified": "2026-06-02T12:34:56.000Z"
+  "modified": "2026-06-02T12:34:56.000Z",
+  "log": { "size": 222496, "modified": "2026-06-02T12:34:56.000Z" }
 }
 ```
 
-### Contenido de la base de datos
+`modified` es la escritura más nueva entre `fvposdb.script` y `fvposdb.log`. `log` es `null` si no hay `.log`.
+
+### Foto de la base de datos
 
 ```http
-GET /api/db
+GET /api/snapshot
 ```
 
-Devuelve el contenido completo de `fvposdb.script`.
+Lee `fvposdb.script` y el `fvposdb.log` que está al lado (las ventas desde el último checkpoint), y devuelve la foto en el mismo formato que la publicada (`snapshot.json.gz`, ver `src/lib/snapshot.js`). La variable `FV_DB_PATH` cambia la ruta de la base.
 
 ## Ubicación del archivo de datos
 
