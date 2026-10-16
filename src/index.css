@@ -327,7 +327,7 @@ button:disabled { cursor: default; }
 /* ─── Navegación ───────────────────────────────────────────────────────────── */
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
   height: calc(var(--nav-h) + var(--safe-b)); padding-bottom: var(--safe-b);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
@@ -433,3 +433,50 @@ button:disabled { cursor: default; }
 }
 .copy:hover, .copy:focus-visible { color: var(--ink); background: var(--surface-2); }
 .copy.is-ok { color: var(--up); }
+
+/* ─── Consultor de precios ─────────────────────────────────────────────────── */
+.finder { display: flex; gap: 8px; align-items: stretch; }
+.finder__box { position: relative; flex: 1; min-width: 0; }
+.finder__input {
+  width: 100%; min-height: 52px; padding: 0 44px 0 14px;
+  font: 500 18px var(--sans); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: var(--r-md);
+  -webkit-appearance: none; appearance: none;
+}
+.finder__input::-webkit-search-cancel-button { display: none; }
+.finder__input::placeholder { color: var(--muted); }
+.finder__input:focus { outline: 2px solid var(--focus); outline-offset: 0; border-color: transparent; }
+.finder__clear {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: none; color: var(--muted);
+}
+.finder__scan { margin-top: 0; min-height: 52px; padding: 0 16px; flex: none; }
+
+.ficha { display: grid; gap: 10px; }
+.ficha .tag__label { font-size: 18px; line-height: 1.25; overflow-wrap: anywhere; }
+.ficha .copy { color: inherit; opacity: 0.7; }
+.ficha .copy:hover, .ficha .copy:focus-visible { background: rgb(0 0 0 / 0.08); opacity: 1; }
+.ficha__sin { font: 700 36px/1.1 var(--cond); margin: 10px 0 4px; }
+.ficha__venta { display: flex; gap: 8px; align-items: flex-start; font-size: 15px; color: var(--ink-2); padding: 0 4px; }
+.ficha__venta strong { color: var(--ink); font-weight: 600; }
+.ficha__venta.is-alert { color: var(--ink); }
+.ficha__venta.is-alert svg { color: var(--down); flex: none; margin-top: 2px; }
+@media (min-width: 900px) { .ficha .tag__price { margin-bottom: 0; } }
+
+.hit { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 0; }
+.hit .list__top, .hit .list__meta { display: flex; }
+.hit:hover .list__name { text-decoration: underline; text-underline-offset: 2px; }
+
+.scan { position: fixed; inset: 0; z-index: 50; background: #000; display: grid; }
+.scan__video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scan__frame {
+  position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%);
+  width: min(78vw, 420px); aspect-ratio: 2 / 1; border: 3px solid var(--tag); border-radius: var(--r-md);
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / 0.45);
+}
+.scan__bar {
+  position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 4px; justify-items: center;
+  padding: 16px var(--gutter) calc(var(--safe-b) + 20px); text-align: center;
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.7) 30%);
+}
+.scan__text { color: #fff; font-size: 16px; font-weight: 500; max-width: 36ch; }

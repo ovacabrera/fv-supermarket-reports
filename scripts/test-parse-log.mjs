@@ -12,7 +12,9 @@ function order(id, total, date, status = "COMPLETED") {
   return `INSERT INTO FVPOS_ORDER VALUES(${v.join(",")})`;
 }
 const line = (id, orderId, price) => `INSERT INTO FVPOS_ORDER_LINE VALUES(${id},${price}.0E0,'','0',0.0E0,1,${price}.0E0,0.0E0,1.0E0,0.0E0,NULL,${orderId},NULL)`;
-const product = (id, name) => `INSERT INTO FVPOS_PRODUCT VALUES(${id},'0',15,'22',0.0E0,'2020-08-15 13:11:03.705000','${name}')`;
+const product = (id, name, baja = 0) => `INSERT INTO FVPOS_PRODUCT VALUES(${id},'0',15,'77${id}',0.0E0,'2020-08-15 13:11:03.705000','${name}','${baja}')`;
+// Precio: 0 PRICE_ID, 4 LAST_UPDATED_PRICE, 8 SELLING_PRICE, 9 PRICE_LIST_ID, 10 PRODUCT_ID.
+const price = (id, productId, amount, list, date) => `INSERT INTO FVPOS_PRODUCT_PRICE VALUES(${id},0.0E0,0.0E0,0.0E0,'${date}.000000',${amount}.0E0,0.0E0,NULL,${amount}.0E0,${list},${productId},3)`;
 
 const script = [
   "CREATE MEMORY TABLE PUBLIC.FVPOS_ORDER(ORDER_ID BIGINT NOT NULL PRIMARY KEY)",
@@ -20,6 +22,9 @@ const script = [
   order(11, 200, "2026-10-14 11:00:00"),
   line(1, 10, 100),
   product(5, "Leche"),
+  product(6, "Pan viejo", 1),                  // dado de baja: no va al catálogo
+  price(1, 5, 1000, 1, "2026-09-01 10:00:00"),
+  price(2, 5, 900, 2, "2026-09-01 10:00:00"),  // lista Mayorista: no se usa
 ].join("\n");
 
 const log = [
@@ -34,6 +39,8 @@ const log = [
   order(11, 250, "2026-10-14 11:00:00", "CANCELED"),
   "DELETE FROM FVPOS_PRODUCT WHERE PRODUCT_ID=5",
   product(5, "Leche entera"),
+  "DELETE FROM FVPOS_PRODUCT_PRICE WHERE PRICE_ID=1",
+  price(1, 5, 1200, 1, "2026-10-15 08:00:00"),
   "COMMIT",
   "/*C5*/" + order(14, 400, "2026-10-15 10:00:00"),           // sin COMMIT al final: no se aplica
   order(15, 500, "2026-10-15 10:01:00").slice(0, 40),         // última línea a medio escribir (sin salto): se ignora
@@ -46,6 +53,9 @@ assert.deepEqual(db.orders.map(o => o.id), [10, 12], "la 11 quedó anulada, la 1
 assert.equal(db.orders[1].total, 300);
 assert.deepEqual(db.orderLines.map(l => l.orderId), [10, 12]);
 assert.equal(db.products[5], "Leche entera");
+assert.deepEqual(db.catalog.map(c => [c.productId, c.barcode, c.price]), [[5, "775", 1200]], "precio Minorista actualizado por el .log, sin los dados de baja");
+assert.equal(db.catalog[0].priceDate.getDate(), 15);
+assert.equal(db.products[6], "Pan viejo", "los dados de baja siguen con nombre para las ventas viejas");
 assert.equal(info.log.commits, 2);
 assert.equal(info.log.rollbacks, 1);
 assert.equal(info.log.uncommitted, 1);

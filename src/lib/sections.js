@@ -3,6 +3,7 @@ export const SECTIONS = [
   { id: "ventas", label: "Ventas" },
   { id: "productos", label: "Productos" },
   { id: "gondola", label: "Góndola" },
+  { id: "precios", label: "Precios" },
   { id: "pagos", label: "Pagos" },
   { id: "historico", label: "Histórico" },
 ];

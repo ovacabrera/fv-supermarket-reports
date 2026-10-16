@@ -13,7 +13,7 @@
 //   3. las filas finales → orders, orderLines, orderPayments, etc.
 
 // Tablas que usa el reporte. En todas, la primera columna es la PK.
-const TABLES = ["FVPOS_ORDER", "FVPOS_ORDER_LINE", "FVPOS_EMPLOYEE", "FVPOS_PRODUCT_CATEGORY", "FVPOS_PRODUCT", "FVPOS_CREDIT_CARD", "FVPOS_DEBIT_CARD", "FVPOS_CASH_OPERATION"];
+const TABLES = ["FVPOS_ORDER", "FVPOS_ORDER_LINE", "FVPOS_EMPLOYEE", "FVPOS_PRODUCT_CATEGORY", "FVPOS_PRODUCT", "FVPOS_PRODUCT_PRICE", "FVPOS_CREDIT_CARD", "FVPOS_DEBIT_CARD", "FVPOS_CASH_OPERATION"];
 
 const decodeUnicode = text => text.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
 
@@ -141,7 +141,7 @@ function buildDb(store) {
   function parseTS(v) { if (!v || v === "NULL") return null; return new Date(v.replace(/\.\d+$/, "").replace(" ", "T")); }
   function* valuesOf(table) { for (const line of rowsOf(store, table)) { const v = parseValues(line); if (v) yield v; } }
 
-  const orders = [], orderLines = [], orderPayments = [], employees = {}, categories = {}, products = {}, paymentTypes = {}, cashOperations = [];
+  const orders = [], orderLines = [], orderPayments = [], employees = {}, categories = {}, products = {}, paymentTypes = {}, cashOperations = [], catalog = [];
   for (const p of PAY) paymentTypes[p.id] = p.name;
 
   for (const v of valuesOf("FVPOS_ORDER")) {
@@ -164,7 +164,32 @@ function buildDb(store) {
     employees[id] = name;
   }
   for (const v of valuesOf("FVPOS_PRODUCT_CATEGORY")) categories[num(v[0])] = v[2] || `Cat.${v[0]}`;
-  for (const v of valuesOf("FVPOS_PRODUCT")) products[num(v[0])] = v[6] || `Prod.${v[0]}`;
+
+  // ── Productos y catálogo (consultor de precios) ──────────────────────────────
+  // FVPOS_PRODUCT.SELLING_PRICE está siempre en 0: el precio de venta está en FVPOS_PRODUCT_PRICE,
+  // una fila por artículo y lista. 0 = PRICE_ID, 4 = LAST_UPDATED_PRICE, 8 = SELLING_PRICE,
+  // 9 = PRICE_LIST_ID (1 = Minorista), 10 = PRODUCT_ID. PREVIOUS_SELLING_PRICE (6) viene siempre en 0.
+  const PRICE_LIST_MINORISTA = 1;
+  const precios = new Map();
+  for (const v of valuesOf("FVPOS_PRODUCT_PRICE")) {
+    if (num(v[9]) !== PRICE_LIST_MINORISTA) continue;
+    const id = num(v[10]), date = parseTS(v[4]);
+    const prev = precios.get(id);
+    if (prev && prev.date && (!date || date < prev.date)) continue; // si hay dos, la más nueva
+    precios.set(id, { price: num(v[8]), date });
+  }
+  // FVPOS_PRODUCT: 3 = BAR_CODE, 6 = PRODUCT_DESCRIPTION, 7 = IS_DISCONTINUED, 37 = CATEGORY_ID.
+  // `products` tiene todos (las ventas viejas los nombran); el catálogo, solo los que no están dados de baja.
+  for (const v of valuesOf("FVPOS_PRODUCT")) {
+    const id = num(v[0]);
+    products[id] = v[6] || `Prod.${v[0]}`;
+    if (v[7] === "1") continue;
+    const p = precios.get(id);
+    catalog.push({
+      productId: id, barcode: v[3] || "", categoryId: v[37] && v[37] !== "NULL" ? num(v[37]) : null,
+      price: p ? p.price : 0, priceDate: p ? p.date : null,
+    });
+  }
 
   // ── Tarjetas (nombres para las formas de pago) ─────────────────────────────
   // FVPOS_CREDIT_CARD / FVPOS_DEBIT_CARD: 0 = CARD_ID, 1 = IS_ACTIVE, 2 = CARD_NAME.
@@ -203,5 +228,5 @@ function buildDb(store) {
     const orderId = v[13] === "NULL" ? null : num(v[13]);
     cashOperations.push({ id, operationTypeId, operationDate, operationAmount, operationNotes, cashNumber, orderId, isActive });
   }
-  return { orders, orderLines, orderPayments, employees, categories, products, paymentTypes, cashOperations };
+  return { orders, orderLines, orderPayments, employees, categories, products, paymentTypes, cashOperations, catalog };
 }

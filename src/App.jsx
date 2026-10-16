@@ -15,6 +15,7 @@ const ProductosPage = lazy(() => import("./pages/ProductosPage.jsx"));
 const PagosPage = lazy(() => import("./pages/PagosPage.jsx"));
 const HistoricoPage = lazy(() => import("./pages/HistoricoPage.jsx"));
 const GondolaPage = lazy(() => import("./pages/GondolaPage.jsx"));
+const PreciosPage = lazy(() => import("./pages/PreciosPage.jsx"));
 
 // URL base del servidor local. En desarrollo (vite) corre aparte en el puerto 3001;
 // en producción (Electron, LAN, Cloudflare) se usa el mismo origen que la página.
@@ -225,8 +226,8 @@ export default function App() {
   }
 
   const dataDate = source === "snapshot" ? snapshotDate(snapMeta) : source === "live" && dbInfo?.modified ? new Date(dbInfo.modified) : null;
-  // Histórico y Góndola miran toda la historia: no usan el período.
-  const usesPeriod = tab !== "historico" && tab !== "gondola";
+  // Histórico y Góndola miran toda la historia, y Precios el catálogo: no usan el período.
+  const usesPeriod = tab !== "historico" && tab !== "gondola" && tab !== "precios";
   const title = SECTIONS.find(s => s.id === tab).label;
 
   let body;
@@ -245,6 +246,7 @@ export default function App() {
   } else if (tab === "ventas") body = <VentasPage db={db} metrics={metrics} filtered={filtered} period={period} />;
   else if (tab === "productos") body = <ProductosPage db={db} metrics={metrics} filtered={filtered} />;
   else if (tab === "gondola") body = <GondolaPage db={db} />;
+  else if (tab === "precios") body = <PreciosPage db={db} />;
   else if (tab === "pagos") body = <PagosPage metrics={metrics} paymentOrder={paymentOrder} />;
   else body = <HistoricoPage db={db} />;
 

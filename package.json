@@ -36,6 +36,7 @@
     "deploy:front": "node scripts/deploy-front.mjs"
   },
   "dependencies": {
+    "barcode-detector": "^3.2.2",
     "express": "^4.18.2",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
