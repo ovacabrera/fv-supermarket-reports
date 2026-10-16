@@ -8,3 +8,7 @@ dist
 snapshot
 logs
 .wrangler
+
+# Ajustes de datos de cada cliente (ver config/ajustes.ejemplo.jsonc)
+config/*.jsonc
+!config/*.ejemplo.jsonc

@@ -9,7 +9,8 @@ export function presets(today) {
     { id: "hoy", label: "Hoy", dateFrom: today, dateTo: today },
     { id: "ayer", label: "Ayer", dateFrom: ayer, dateTo: ayer },
     { id: "7d", label: "7 días", dateFrom: addDays(today, -6), dateTo: today },
-    { id: "mes", label: "Este mes", dateFrom: toYMD(new Date(n.getFullYear(), n.getMonth(), 1, 12)), dateTo: toYMD(new Date(n.getFullYear(), n.getMonth() + 1, 0, 12)) },
+    // Hasta hoy, no hasta fin de mes: los días que faltan no tienen ventas y confunden el conteo.
+    { id: "mes", label: "Este mes", dateFrom: toYMD(new Date(n.getFullYear(), n.getMonth(), 1, 12)), dateTo: today },
     { id: "mes-pasado", label: "Mes pasado", dateFrom: toYMD(new Date(n.getFullYear(), n.getMonth() - 1, 1, 12)), dateTo: toYMD(new Date(n.getFullYear(), n.getMonth(), 0, 12)) },
   ];
 }

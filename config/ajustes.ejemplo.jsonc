@@ -1,0 +1,130 @@
+// ─── Ajustes de datos de un cliente ───────────────────────────────────────────
+//
+// Correcciones puntuales sobre los datos de UN cliente, para no tocar el código.
+// Se aplican cada vez que se arma la foto, después del conector y antes de validar:
+//
+//   base del POS ──► conector ──► modelo común ──► AJUSTES (este archivo) ──► validación ──► foto
+//
+// CÓMO USARLO
+//   1. Copiar este archivo como  config\ajustes.jsonc  (ese nombre NO se sube a GitHub).
+//   2. Editarlo con el Bloc de notas. No hace falta compilar: se lee en cada publicación.
+//   3. Probar sin publicar:  node scripts\publish.mjs --dry-run
+//      El log muestra cada ajuste aplicado y avisa si alguno no encontró nada (⚠).
+//   Otra ruta: AJUSTES=<ruta> en el .env.
+//
+// FORMATO (JSON con comentarios)
+//   - Las líneas que empiezan con // son comentarios y se ignoran.
+//   - Los textos van entre comillas dobles: "así".
+//   - Coma entre elementos, pero NO después del último de una lista o de un bloque.
+//   - Los números van sin comillas y con punto decimal: 1500.50 (no "1.500,50").
+//   - Las fechas van como "AAAA-MM-DD" y las horas como "AAAA-MM-DD HH:MM".
+//   Si hay un error de formato, la publicación se frena y el log dice la línea.
+//
+// REGLAS PARA TODOS LOS AJUSTES
+//   - "tipo"   obligatorio: qué hace (ver la lista de abajo).
+//   - "motivo" obligatorio: por qué se hace. Queda en el log.
+//   - "fecha"  opcional: cuándo se agregó.
+//   - "activo": false  lo desactiva sin borrarlo.
+//   - Los ids son los del sistema de origen: los de una orden de FácilVirtual no sirven
+//     en otro sistema. Por eso el archivo declara su "conector" y la publicación se frena
+//     si no coincide con FUENTE.
+//   - Se aplican en el orden en que están escritos.
+//
+// Los ids y montos de abajo son de EJEMPLO. Reemplazarlos por los reales o borrar el ajuste.
+
+{
+  "version": 1,
+  "cliente": "Nombre del negocio",
+  "conector": "facilvirtual-v1",
+
+  "ajustes": [
+
+    // ── Órdenes ─────────────────────────────────────────────────────────────
+
+    // Saca una o varias órdenes de todos los reportes (con sus líneas, pagos y movimientos de caja).
+    {
+      "tipo": "omitir_orden",
+      "ordenes": [12345, 12346],
+      "motivo": "Total absurdo: se cargó un código de barras como cantidad",
+      "fecha": "2026-10-16"
+    },
+
+    // Saca todas las órdenes con un total mayor al indicado (red de seguridad para errores de carga).
+    {
+      "tipo": "omitir_ordenes_mayores_a",
+      "total": 10000000,
+      "motivo": "Ninguna venta real del negocio supera los $10M"
+    },
+
+    // Corrige el total de una orden.
+    //   "lineas": "proporcional"  ajusta también las líneas y los pagos en la misma proporción
+    //                             (así cierran los reportes por rubro y por medio de pago).
+    //   "lineas": "sin_tocar"     cambia solo el total; los rubros y los pagos pueden no sumar igual.
+    {
+      "tipo": "fijar_total_orden",
+      "orden": 23456,
+      "total": 4500,
+      "lineas": "proporcional",
+      "motivo": "Se cobró $4.500 pero quedó registrada con $45.000"
+    },
+
+    // Cambia el medio de pago de una orden (ids de medio de pago: ver el log de --dry-run).
+    {
+      "tipo": "cambiar_medio_pago",
+      "orden": 34567,
+      "de": 1,
+      "a": 3,
+      "motivo": "Se pagó con débito pero se registró como efectivo",
+      "activo": false
+    },
+
+    // Saca todas las ventas de un período (por ejemplo, pruebas del sistema o una capacitación).
+    {
+      "tipo": "omitir_periodo",
+      "desde": "2026-03-02 08:00",
+      "hasta": "2026-03-02 09:30",
+      "motivo": "Ventas de prueba durante la instalación del POS",
+      "activo": false
+    },
+
+    // ── Productos y rubros ──────────────────────────────────────────────────
+
+    // Producto que se cobra por importe (precio 1 y cantidad = monto), por ejemplo el ticket de la balanza.
+    //   Cuenta 1 unidad por línea, no aparece en los rankings de artículos y se muestra con el rubro indicado.
+    {
+      "tipo": "producto_por_importe",
+      "producto": 99999,
+      "rubro": "Fiambrería Ticket",
+      "motivo": "La fiambrería cobra con un producto genérico por importe"
+    },
+
+    // Mueve un producto a otro rubro (id del rubro en el sistema de origen).
+    {
+      "tipo": "mover_producto_a_rubro",
+      "producto": 45678,
+      "rubro": 12,
+      "motivo": "Estaba cargado en Varios",
+      "activo": false
+    },
+
+    // ── Nombres ─────────────────────────────────────────────────────────────
+
+    // Cambia el nombre con que se muestra algo. "que": "cajero" | "rubro" | "producto" | "medio_pago".
+    {
+      "tipo": "renombrar",
+      "que": "medio_pago",
+      "id": 101,
+      "nombre": "MercadoPago",
+      "motivo": "En el sistema figura como 'MP QR'",
+      "activo": false
+    },
+    {
+      "tipo": "renombrar",
+      "que": "cajero",
+      "id": 7,
+      "nombre": "Caja 2 (tarde)",
+      "motivo": "Usuario compartido por varias personas",
+      "activo": false
+    }
+  ]
+}
