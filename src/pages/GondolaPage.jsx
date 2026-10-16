@@ -68,9 +68,8 @@ function PreciosViejos({ precios }) {
             {visibles.map(f => (
               <li key={f.id}>
                 <div className="list__top">
-                  <span className="list__name">{f.name}</span>
+                  <span className="list__name">{f.name}<CopyButton text={f.name} /></span>
                   <span className="list__value">{ars(f.precio)}</span>
-                  <CopyButton text={f.name} />
                 </div>
                 <div className="list__meta">
                   {grupo !== "sinVentas" && <span>Mismo precio desde el {fechaCorta(f.desde)} · hace {hace(f.dias)}</span>}
@@ -122,9 +121,8 @@ function Faltantes({ falt }) {
             {visibles.map(f => (
               <li key={f.id}>
                 <div className="list__top">
-                  <span className="list__name">{f.name}</span>
+                  <span className="list__name">{f.name}<CopyButton text={f.name} /></span>
                   <span className="list__value">hace {f.gap} días</span>
-                  <CopyButton text={f.name} />
                 </div>
                 <div className="list__meta">
                   <span>Se vendía {Math.round(f.frecuencia * 10)} de cada 10 días</span>
