@@ -1,47 +1,33 @@
-# React + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-
 # Panel Ventas FV
 
-Dashboard de reportes para FácilVirtual desarrollado con React, Express y Electron.
+Panel de reportes de ventas para un supermercado con POS FácilVirtual. Los datos salen de la base del POS, se procesan en el servidor local del negocio y se publican en Cloudflare para verlos desde el celular, sin elegir ningún archivo.
 
 ## Arquitectura
 
-```text
-Electron
-   │
-   ▼
-Express (localhost:3001)
-   ├── Frontend React (build Vite)
-   ├── GET /api/db-info
-   └── GET /api/snapshot
-           │
-           ▼
-      fvposdb.script + fvposdb.log
-```
+![Arquitectura del Panel de Ventas FV](docs/arquitectura.excalidraw.svg)
+
+| Capa | Qué hace | Código |
+|---|---|---|
+| ① Fuentes de datos | Base HSQLDB del POS (`fvposdb.script` + `fvposdb.log`) y el IPC del INDEC | — |
+| ② Servidor on-premise · ingesta y parser | Lee la base (solo lectura), la parsea, arma la foto compacta y la sube a Workers KV. Lo dispara el Programador de tareas a las 10, 14, 19 y 22 h | `scripts/publish.mjs`, `scripts/export-snapshot.mjs`, `server/src/readPosDb.mjs`, `src/lib/parseHSQL.js`, `src/lib/snapshot.js` |
+| ③ Nube · Cloudflare | Workers KV guarda la foto en partes; una Pages Function la sirve en `/data/*`; Pages sirve el front | `functions/data/[[path]].js`, `wrangler.json` |
+| Cloudflare Access | Protege todo el sitio: login por mail con código, solo para el grupo autorizado | panel de Zero Trust |
+| ④ Cliente | SPA que muestra al instante la última foto guardada en IndexedDB y busca una nueva | `src/lib/loadSnapshot.js`, `src/lib/metrics.js`, `src/pages/` |
+| ⑤ Deploy del front | Build de Vite y `wrangler pages deploy`, independiente de los datos | `scripts/deploy-front.mjs` |
+| ⑥ Modo escritorio | Electron + Express en `localhost:3001`, con el mismo parser y sin nube | `electron/main.cjs`, `server/src/server.cjs` |
+
+> El diagrama es un SVG de Excalidraw con la escena embebida: para editarlo, abrir [excalidraw.com](https://excalidraw.com) y arrastrar `docs/arquitectura.excalidraw.svg` (o *Open*). Exportarlo de nuevo como SVG con **Embed scene** tildado y fondo blanco, y reemplazar el archivo.
 
 ## Tecnologías
 
-* React 19
-* Vite
-* Express
-* Electron
-* Electron Builder
-* Recharts
+| | |
+|---|---|
+| Front | React 19, Vite 8, Recharts, barcode-detector (zxing-wasm) |
+| Ingesta | Node.js 20+ (ESM), zlib |
+| Nube | Cloudflare Pages, Pages Functions, Workers KV |
+| Seguridad | Cloudflare Access (Zero Trust) |
+| Escritorio | Electron, electron-builder, Express |
+| Tooling | Wrangler 4, ESLint |
 
 ## Estructura del proyecto
 
