@@ -17,6 +17,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - ⬜ **Falta la producción real**: que la **PC del POS** publique sola todos los días. Hoy los datos publicados son de una copia de la base del 15/10 a las 20:34, hecha a mano, y se ven en rojo como viejos cuando pasan más de 36 h.
 - ⬜ **Repo de GitHub público**: pasarlo a privado (ver P1).
 - 🟡 **Fase 7 (leer también el `.log`)**: hecha en el repo y publicada el 2026-10-15 con las ventas del día incluidas. Falta la verificación contra el checkpoint del día siguiente.
+- ⬜ **IPC desactualizado**: está cargado a mano en `src/lib/ipc.js` y llega hasta abril de 2026. El INDEC ya publicó hasta septiembre. La **Fase 9** lo baja solo en cada publicación.
 - ⬜ Después: **Fase 5** (PWA, con la identidad visual nueva).
 
 ## Próximos pasos: puesta en producción
@@ -364,9 +365,37 @@ Objetivo: que los reportes se vean profesionales, se lean bien en el celular (us
 
 ### Orden sugerido
 
-P7 (datos) → Fase 7 (`.log`) → Fase 8 (rediseño) → Fase 5 (PWA, con la identidad nueva). La Fase 8 conviene después de la 7 porque el cálculo de "Datos al …" y las fuentes de datos cambian.
+P7 (datos) → Fase 7 (`.log`) → Fase 8 (rediseño) → Fase 9 (IPC automático) → Fase 5 (PWA, con la identidad nueva). La Fase 8 conviene después de la 7 porque el cálculo de "Datos al …" y las fuentes de datos cambian.
 
 ---
+
+## Fase 9: IPC del INDEC automático ⬜
+
+Objetivo: que el ajuste por inflación (Histórico IPC y comparaciones "ajustado por IPC") use siempre el último dato oficial, sin editar código. Hoy `src/lib/ipc.js` tiene la variación mensual escrita a mano y quedó en abril de 2026.
+
+### Fuentes (verificadas el 2026-10-15)
+
+- **INDEC, CSV oficial** (recomendada): `https://www.indec.gob.ar/ftp/cuadros/economia/serie_ipc_divisiones.csv`
+  - ~1,2 MB, separado por `;`, codificación **ISO-8859-1** (latin1), fin de línea CRLF, decimales con **coma** (`2,1`) y `NA` cuando no hay dato.
+  - Columnas: `Codigo;Descripcion;Clasificador;Periodo;Indice_IPC;v_m_IPC;v_i_a_IPC;Region`. `Periodo` es `AAAAMM`, `v_m_IPC` es la variación mensual en %.
+  - Filas que interesan: `Codigo = 0` (nivel general) y `Region = Nacional`. También está `Codigo = 01` (**Alimentos y bebidas no alcohólicas**), más representativo para un supermercado.
+  - Se actualizó el 13/10/2026 (`Last-Modified`) con el dato de septiembre (1,9%). Coincide con los valores cargados a mano en 2025–2026.
+- **API de Series de Tiempo** (`apis.datos.gob.ar`, serie `148.3_INIVELNAL_DICI_M_26`, `representation_mode=percent_change`): JSON cómodo, pero **atrasada**: el 15/10 llegaba solo hasta julio de 2026. Queda como respaldo.
+
+### Tareas
+
+- [ ] **Arreglo inmediato** (sin esperar esta fase): completar a mano en `src/lib/ipc.js` mayo a septiembre de 2026: 2,1 · 1,9 · 2,1 · 1,7 · 1,9.
+- [ ] `src/lib/indec.js`: función pura `parseIpcCsv(text)` → `{ [año]: [12 variaciones mensuales o null] }` (mismo formato que hoy `IPC`), con la serie elegida (nivel general y, opcional, alimentos). Sin red ni `fs`, para poder probarla.
+- [ ] `scripts/fetch-ipc.mjs` (o adentro de `export-snapshot.mjs`): baja el CSV con timeout (~20 s), lo decodifica como latin1 y lo parsea.
+  - **Validación antes de usarlo**: meses consecutivos sin huecos, valores entre −5% y 30%, y que coincida con lo ya conocido (los datos viejos no deberían cambiar; si cambian, avisar en el log).
+  - Si falla la descarga o la validación: usar la última copia buena y seguir. **Publicar nunca falla por el IPC**; solo avisa en `publish.log`.
+- [ ] **Última copia buena**: guardarla en `snapshot/ipc.json` (fuera del repo) con la fecha de descarga y el `Last-Modified` del INDEC. Si no hay ninguna, usar el valor de `src/lib/ipc.js`.
+  - El INDEC publica una vez por mes (a mediados de mes): con un `HEAD` y el `Last-Modified` se evita bajar el archivo en cada publicación horaria.
+- [ ] **Snapshot**: agregar `ipc` a la foto (un mapa más, `encodeSnapshot` lo toma solo) y `meta.ipc = { hasta: "2026-09", descargado, fuente }`.
+- [ ] **Front**: `acumuladoFactor` y `ultimoIpc` usan `db.ipc` si viene en la foto, y si no, `IPC` de `src/lib/ipc.js`. La nota de fuente muestra "IPC INDEC hasta sep 2026".
+- [ ] **Server local / Electron**: `/api/snapshot` hace lo mismo (con internet, el dato nuevo; sin internet, la última copia guardada o el valor del código).
+- [ ] Opcional: elegir el índice en Histórico (**nivel general** o **alimentos y bebidas**). Decidir antes con el usuario cuál usar por defecto.
+- [ ] Verificación: `parseIpcCsv` sobre el CSV del 13/10 tiene que dar los mismos valores que `src/lib/ipc.js` para 2023–abril 2026, y los de mayo a septiembre de arriba. Probar también sin red (corta la descarga): la publicación termina bien y usa la copia guardada.
 
 ## Pendientes de datos y bugs conocidos
 
