@@ -17,7 +17,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - ⬜ **Falta la producción real**: que la **PC del POS** publique sola todos los días. Hoy los datos publicados son de una copia de la base del 15/10 a las 20:34, hecha a mano, y se ven en rojo como viejos cuando pasan más de 36 h.
 - ⬜ **Repo de GitHub público**: pasarlo a privado (ver P1).
 - 🟡 **Fase 7 (leer también el `.log`)**: hecha en el repo y publicada el 2026-10-15 con las ventas del día incluidas. Falta la verificación contra el checkpoint del día siguiente.
-- 🟡 **IPC (Fase 9)**: hecha en el repo el 2026-10-15. Cada publicación baja del CSV oficial del INDEC el rubro **Alimentos y bebidas no alcohólicas** (nacional) y lo mete en la foto. Falta publicarla y ver en noviembre que tome sola el dato de octubre.
+- 🟡 **IPC (Fase 9)**: hecha en el repo el 2026-10-15. Cada publicación baja del CSV oficial del INDEC el rubro **Alimentos y bebidas no alcohólicas** (nacional) y lo mete en la foto. Publicada el 2026-10-15. Falta ver en noviembre que tome sola el dato de octubre.
 - ⬜ Después: **Fase 5** (PWA, con la identidad visual nueva).
 
 ## Próximos pasos: puesta en producción
@@ -380,7 +380,7 @@ P7 (datos) → Fase 7 (`.log`) → Fase 8 (rediseño) → Fase 9 (IPC automátic
 
 ---
 
-## Fase 9: IPC del INDEC automático 🟡 (hecha en el repo; falta publicarla y ver el dato de octubre)
+## Fase 9: IPC del INDEC automático 🟡 (hecha y publicada; falta ver el dato de octubre)
 
 Objetivo: que el ajuste por inflación (Histórico IPC y comparaciones "ajustado por IPC") use siempre el último dato oficial, sin editar código. Hoy `src/lib/ipc.js` tiene la variación mensual escrita a mano.
 
@@ -415,7 +415,8 @@ Objetivo: que el ajuste por inflación (Histórico IPC y comparaciones "ajustado
   - `node scripts/test-ipc.mjs <csv>`: con el CSV del 13/10, da exactamente los valores de `src/lib/ipc.js` (2023 a septiembre de 2026).
   - Casos armados (sin red, con `fetch` falso): sin red y sin copia usa el código; con red baja y guarda; con el mismo `Last-Modified` solo hace el `HEAD`; sin red usa la copia; un archivo que no valida no pisa la copia.
   - `npm run snapshot` contra el INDEC real: "IPC … hasta 2026-09 (INDEC)". Con la foto decodificada, el Histórico da igual que con los valores del código. `/api/snapshot` del server local también trae el IPC.
-- [ ] Publicar (`npm run publish -- --build`) y comprobar en el celular que el Histórico siga igual.
+- [x] Publicado el 2026-10-15 (`npm run publish -- --build`, con la copia de las 20:34): "IPC hasta 2026-09 (indec)".
+- [ ] 🧑 Comprobar en el celular que el Histórico siga igual (los valores no cambian: el INDEC llega hasta septiembre, igual que lo cargado a mano).
 - [ ] A mediados de noviembre: ver en `publish.log` que haya tomado solo el dato de octubre ("IPC hasta 2026-10").
 
 ## Pendientes de datos y bugs conocidos
