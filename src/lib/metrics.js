@@ -2,15 +2,15 @@
 // Funciones puras (sin React): reciben `db` (salida de parseHSQLScript o del snapshot)
 // y devuelven los datos que muestran las páginas.
 
-import { DIAS_CORTO, DIAS_LARGO, MESES_CORTO, toYMD, fromYMD } from "./dates.js";
-import { ipcDe, acumuladoFactor } from "./ipc.js";
+import { DIAS_CORTO, DIAS_LARGO, MESES_CORTO, toYMD, fromYMD, addDays } from "./dates.js";
+import { ipcDe, acumuladoFactor, factorEntre, ultimoIpc } from "./ipc.js";
 
 // Producto genérico que usa la fiambrería para cobrar por ticket: se muestra como rubro propio
 // y no cuenta como "artículo" en los rankings.
-const FIAMBR_PROD_ID = 25912;
+export const FIAMBR_PROD_ID = 25912;
 // Órdenes con totales absurdos (códigos de barras cargados como cantidad) que se excluyen
 // de los resúmenes mensuales y anuales.
-const MAX_ORDEN_RAZONABLE = 10_000_000;
+export const MAX_ORDEN_RAZONABLE = 10_000_000;
 
 function median(sorted) {
   if (!sorted.length) return 0;
@@ -257,4 +257,109 @@ export function computeAnual(db, year, esActual, hoy = new Date()) {
   });
 
   return { total, ops, ticket: ops ? total / ops : 0, unidades, data };
+}
+
+// ─── Mapa de calor: compras promedio por día de la semana y hora ─────────────
+// Las 8 semanas hasta el último día con ventas. Cada celda se divide por la cantidad de ese
+// día de la semana que tuvo ventas (un feriado cerrado no baja el promedio).
+export function computeMapaCalor(db, semanas = 8) {
+  const fin = lastSaleDate(db);
+  if (!fin) return null;
+  const hasta = toYMD(fin);
+  const desde = addDays(hasta, -semanas * 7 + 1);
+  const desdeMs = fromYMD(desde).getTime() - 12 * 36e5;
+  const compras = Array.from({ length: 7 }, () => Array(24).fill(0));
+  const ventas = Array.from({ length: 7 }, () => Array(24).fill(0));
+  const fechas = Array.from({ length: 7 }, () => new Set());
+  for (const o of db.orders) {
+    if (o.saleDate.getTime() < desdeMs || o.total > MAX_ORDEN_RAZONABLE) continue;
+    const d = o.saleDate.getDay(), h = o.saleDate.getHours();
+    compras[d][h]++;
+    ventas[d][h] += o.total;
+    fechas[d].add(toYMD(o.saleDate));
+  }
+  // Horas con ventas (sin las sueltas: menos de una compra por semana sumando todos los días).
+  const horas = [];
+  for (let h = 0; h < 24; h++) {
+    const porSemana = compras.reduce((s, fila, d) => s + (fechas[d].size ? fila[h] / fechas[d].size : 0), 0);
+    if (porSemana >= 1) horas.push(h);
+  }
+  if (!horas.length) return null;
+  // Bloques de horas seguidas (un corte de hasta 3 horas, como la siesta, no separa).
+  // Se muestra el bloque con más compras: las ventas sueltas de madrugada quedan afuera.
+  const bloques = [[horas[0]]];
+  for (const h of horas.slice(1)) {
+    const b = bloques[bloques.length - 1];
+    if (h - b[b.length - 1] <= 4) b.push(h); else bloques.push([h]);
+  }
+  const comprasDe = b => b.reduce((s, h) => s + compras.reduce((t, fila) => t + fila[h], 0), 0);
+  const mejor = bloques.reduce((a, b) => (comprasDe(b) > comprasDe(a) ? b : a));
+  const rango = Array.from({ length: mejor[mejor.length - 1] - mejor[0] + 1 }, (_, i) => mejor[0] + i);
+  // Lunes primero.
+  const dias = [1, 2, 3, 4, 5, 6, 0].map(d => ({
+    dia: d, nombre: DIAS_LARGO[d], corto: DIAS_CORTO[d],
+    celdas: rango.map(h => {
+      const n = fechas[d].size;
+      return { hora: h, compras: n ? compras[d][h] / n : 0, ventas: n ? ventas[d][h] / n : 0 };
+    }),
+  }));
+  let max = 0, pico = null;
+  for (const d of dias) for (const c of d.celdas) if (c.compras > max) { max = c.compras; pico = { ...c, nombre: d.nombre }; }
+  return { dias, horas: rango, max, pico, desde, hasta };
+}
+
+// ─── Comparación con otros períodos ───────────────────────────────────────────
+// · Semanas antes: el mismo rango corrido las semanas que hagan falta para no pisarse.
+// · Hace un año: 364 días antes (mismo día de la semana), ajustado por el IPC.
+// Si el período termina en el día de los datos y ese día está en curso, el último día de la
+// comparación se corta a la hora de la última venta.
+function totalEntre(db, dateFrom, dateTo, timeFrom, timeTo, corteUltimoDia) {
+  const lastTo = corteUltimoDia && corteUltimoDia < timeTo ? corteUltimoDia : timeTo;
+  const ords = filterOrders(db, { dateFrom, dateTo, timeFrom, timeTo })
+    .filter(o => o.total <= MAX_ORDEN_RAZONABLE)
+    .filter(o => {
+      if (toYMD(o.saleDate) !== dateTo) return true;
+      const hm = `${String(o.saleDate.getHours()).padStart(2, "0")}:${String(o.saleDate.getMinutes()).padStart(2, "0")}`;
+      return hm <= lastTo;
+    });
+  return { total: ords.reduce((s, o) => s + o.total, 0), ops: ords.length };
+}
+
+export function computeComparacion(db, filtered, period, hoy = new Date()) {
+  const fin = lastSaleDate(db);
+  if (!fin) return null;
+  const primera = db.orders.reduce((m, o) => (o.saleDate < m ? o.saleDate : m), fin);
+  const primeraYMD = toYMD(primera);
+  const { dateFrom, dateTo, timeFrom, timeTo } = period;
+  const enCurso = dateTo === toYMD(fin) && dateTo === toYMD(hoy);
+  const corte = enCurso ? `${String(fin.getHours()).padStart(2, "0")}:${String(fin.getMinutes()).padStart(2, "0")}` : null;
+  const actual = filtered.filter(o => o.total <= MAX_ORDEN_RAZONABLE).reduce((s, o) => s + o.total, 0);
+  const dias = Math.round((fromYMD(dateTo) - fromYMD(dateFrom)) / 864e5) + 1;
+
+  const filas = [];
+  const semanas = Math.ceil(dias / 7);
+  const sFrom = addDays(dateFrom, -7 * semanas), sTo = addDays(dateTo, -7 * semanas);
+  if (sFrom >= primeraYMD) {
+    const { total, ops } = totalEntre(db, sFrom, sTo, timeFrom, timeTo, corte);
+    filas.push({
+      id: "semanas", label: semanas === 1 ? "Una semana antes" : `${semanas} semanas antes`,
+      dateFrom: sFrom, dateTo: sTo, total, ops, delta: total > 0 ? ((actual - total) / total) * 100 : null,
+    });
+  }
+  const aFrom = addDays(dateFrom, -364), aTo = addDays(dateTo, -364);
+  if (aFrom >= primeraYMD) {
+    const { total, ops } = totalEntre(db, aFrom, aTo, timeFrom, timeTo, corte);
+    const ipc = ipcDe(db);
+    const ult = ultimoIpc(ipc);
+    const a = fromYMD(aTo), b = fromYMD(dateTo);
+    // Inflación de los meses entre las dos fechas, hasta el último dato del INDEC.
+    const hastaMes = ult ? Math.min(b.getFullYear() * 12 + b.getMonth(), ult.year * 12 + ult.month) : 0;
+    const factor = ult ? factorEntre(a.getFullYear(), a.getMonth(), Math.floor(hastaMes / 12), hastaMes % 12, ipc) : 1;
+    const ajustado = total * factor;
+    filas.push({
+      id: "anio", label: "Hace un año, con la inflación", dateFrom: aFrom, dateTo: aTo,
+      total: ajustado, sinAjuste: total, factor, ops, delta: ajustado > 0 ? ((actual - ajustado) / ajustado) * 100 : null,
+    });
+  }
+  return { actual, corte, filas };
 }

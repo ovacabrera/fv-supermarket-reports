@@ -1,5 +1,5 @@
 import {
-  Bar, BarChart, CartesianGrid, LabelList, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Bar, BarChart, CartesianGrid, LabelList, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { ars, arsShort, num, pct } from "../lib/format.js";
 import { AXIS_TICK, useChartTheme } from "../lib/theme.js";
@@ -133,5 +133,46 @@ export function IpcBars({ data, year }) {
         </BarChart>
       </ResponsiveContainer>
     </div>
+  );
+}
+
+// ─── Inflación de la góndola contra el IPC (% acumulado desde el mes base) ────
+// Una sola escala; las dos series con leyenda y etiqueta directa en el último punto.
+function EndLabel({ x, y, index, last, value, color, below }) {
+  if (index !== last || value == null) return null;
+  return <text x={x - 4} y={y + (below ? 18 : -9)} textAnchor="end" fill={color} fontSize={12} fontWeight={600} fontFamily={AXIS_TICK.fontFamily}>{pct(value, 0)}</text>;
+}
+
+export function InflacionLines({ data, labels }) {
+  const { t, grid, xProps, yProps } = useAxes();
+  const last = data.length - 1;
+  const propiaAbajo = (data[last].propia ?? 0) < data[last].ipc;
+  const colors = { propia: t.data, ipc: t.series[1] };
+  return (
+    <>
+      <div className="chart-legend">
+        <span><i className="swatch swatch--line" style={{ background: colors.propia }} />{labels.propia}</span>
+        <span><i className="swatch swatch--line" style={{ background: colors.ipc }} />{labels.ipc}</span>
+      </div>
+      <div className="chart">
+        <ResponsiveContainer width="100%" height={230}>
+          <LineChart data={data} margin={{ ...MARGIN, top: 14, right: 8 }}>
+            {grid}
+            <XAxis dataKey="mes" {...xProps} interval="preserveStartEnd" minTickGap={18} />
+            <YAxis {...yProps} tickFormatter={v => `${v}%`} width={42} />
+            <Tooltip cursor={{ stroke: t.axis, strokeWidth: 1 }} content={<Tip title={d => d.mes} rows={d => [
+              { text: d.propia == null ? `${labels.propia}: sin ventas` : `${labels.propia}: ${pct(d.propia)}`, color: colors.propia },
+              { text: `${labels.ipc}: ${pct(d.ipc)}`, color: colors.ipc },
+            ]} />} />
+            <Line dataKey="ipc" stroke={colors.ipc} strokeWidth={2} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: t.surface }} isAnimationActive={false}>
+              <LabelList dataKey="ipc" content={<EndLabel last={last} color={t.ink} below={!propiaAbajo} />} />
+            </Line>
+            <Line dataKey="propia" stroke={colors.propia} strokeWidth={2} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: t.surface }} connectNulls isAnimationActive={false}>
+              <LabelList dataKey="propia" content={<EndLabel last={last} color={t.ink} below={propiaAbajo} />} />
+            </Line>
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </>
   );
 }

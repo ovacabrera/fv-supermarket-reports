@@ -21,6 +21,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - ⬜ **Repo de GitHub público**: por ahora se deja así, a propósito (ver P1).
 - 🟡 **Fase 7 (leer también el `.log`)**: hecha en el repo y publicada el 2026-10-15 con las ventas del día incluidas. El 2026-10-16 se confirmó en la PC del POS que Node lee `fvposdb.log` con el POS abierto. Falta la verificación contra el checkpoint del día siguiente.
 - 🟡 **IPC (Fase 9)**: hecha en el repo el 2026-10-15. Cada publicación baja del CSV oficial del INDEC el rubro **Alimentos y bebidas no alcohólicas** (nacional) y lo mete en la foto. Publicada el 2026-10-15. Falta ver en noviembre que tome sola el dato de octubre.
+- 🟡 **Reportes nuevos (Fases 12 a 17)**: hechos en el repo el 2026-10-16. Hay una sección nueva, **Góndola**, con precios sin actualizar, inflación propia y faltantes probables. Además: comparación con otros períodos en Ventas, Pareto y pares en Productos, y mapa de calor en Histórico. Falta publicar el front. La **Fase 18** (caja y anulaciones) se descartó: no hay datos.
 - ⬜ Después: **Fase 5** (PWA, con la identidad visual nueva).
 - ⬜ **Fase 10 (conectores)**: que los reportes anden con otros sistemas de punto de venta. Se elige la fuente al instalar (`FUENTE=facilvirtual-v1`, …) y cada conector arma la misma foto.
 
@@ -589,6 +590,117 @@ Hasta el paso 3, producción sigue con el último deploy de la PC del POS (front
 - Workers KV, plan gratis: hasta 25 MiB por valor (la foto pesa ~4,3 MB), 1.000 escrituras y 100.000 lecturas por día (usamos ~8 escrituras). Una foto nueva puede tardar hasta ~1 minuto en verse en todos lados.
 - Se descartó R2 porque activarlo puede pedir una tarjeta aunque no se cobre.
 - Fase 10: con varios clientes, cada instalación necesita su propio proyecto de Pages y su KV. `wrangler.json` tiene el de este cliente; habrá que sacarlo a la configuración de la instalación.
+
+## Reportes nuevos (Fases 12 a 18): qué datos hay, sin compras ni stock
+
+Propuestos el 2026-10-16. El negocio **no carga compras ni maneja stock**, así que todo sale de las ventas. Antes de diseñarlos se revisó la base real (copia del 15/10, 148.893 órdenes):
+
+| Dato | Qué hay | Sirve para |
+|---|---|---|
+| Precio cobrado en cada línea, con fecha | `PRICE` × `QTY` de `FVPOS_ORDER_LINE` (en el snapshot: `subtotal / qty`) | Fase 12 |
+| Costo en las líneas (`COST_PRICE`) | Igual al precio en el 93% de las líneas: **no hay costos reales**. `FVPOS_PRODUCT` tiene costo y precio en 0. | Nada: no se pueden calcular márgenes |
+| Ventas por artículo y día | Sí, completo | Fases 13, 15 y 16 |
+| Hora de cada venta | Sí | Fases 14 y 17 |
+| Estado de las órdenes | 148.891 `COMPLETED` y **2 `CANCELLED`** en 6 años (las dos con totales absurdos) | Fase 18: no alcanza |
+| Operaciones de caja | 18 aperturas, 14 cierres y 14 retiros en 6 años: la caja se cierra cada varios meses | Fase 18: no alcanza |
+| Clientes, descuentos, ofertas, notas de crédito | 1 cliente (consumidor final), 0 descuentos, 0 líneas en oferta, 0 notas de crédito, 0 cantidades negativas | Nada por ahora |
+
+Ubicación en el front:
+- **Sección nueva "Góndola"** (no usa el período): precios sin actualizar e inflación propia (Fase 12) y faltantes probables (Fase 13).
+- **Ventas**: comparación con otros períodos (Fase 17).
+- **Productos**: Pareto ABC (Fase 16) y artículos que se compran juntos (Fase 15).
+- **Histórico**: mapa de calor día × hora (Fase 14).
+
+Reglas comunes:
+- Cálculos puros en `src/lib/` (sin React), como `metrics.js`. **No cambia el snapshot ni el parser**: todo sale de `orders` y `orderLines`.
+- Se excluye el producto 25912 "Fiambrería Ticket" (PRICE = 1, la cantidad es el importe) y las órdenes de más de $10M (`MAX_ORDEN_RAZONABLE`). Cuando se haga la Fase 10, pasan a leer el campo genérico de los ajustes del cliente.
+
+## Fase 12: precios sin actualizar e inflación propia ✅ (2026-10-16)
+
+Objetivo: avisar qué artículos se siguen cobrando a un precio viejo mientras la inflación sube. Sin compras cargadas, es la forma de **perder margen sin darse cuenta**.
+
+- [x] `src/lib/gondola.js` → `computePrecios(db, hoy)`:
+  - **Precio actual** de cada artículo: el de su última venta (`subtotal / qty`, redondeado a centavos).
+  - **Desde cuándo**: la primera venta de la racha final con ese precio (tolerancia ±1%, para el redondeo de los artículos por peso).
+  - **Inflación desde entonces**: IPC acumulado de alimentos desde el mes siguiente al cambio hasta el último dato del INDEC. "Precio con inflación" = precio × ese factor.
+  - Solo los **150 artículos que más facturaron en los últimos 90 días**, vendidos en los últimos 30, con **45 días o más sin cambio**. Orden: más inflación acumulada primero.
+- [x] **Inflación de la góndola**: canasta de los 100 artículos que más facturaron en los últimos 12 meses. Por mes se toma la mediana del precio de cada artículo, se compara con el mes base (hace 12 meses) y se pondera por lo que facturó cada uno. Se compara con el IPC de alimentos acumulado en los mismos meses. Gráfico: dos líneas, una sola escala (% acumulado desde el mes base).
+- [x] Front: sección **Góndola** (`src/pages/GondolaPage.jsx`), con su ícono y su lugar en la navegación.
+- [x] Verificación con la copia del 15/10 (ver "Verificación de las Fases 12 a 17").
+
+## Fase 13: faltantes probables ✅ (2026-10-16)
+
+Objetivo: sin stock, detectar por las ventas los artículos que **probablemente se terminaron** (o se sacaron de la góndola), para armar el pedido.
+
+- [x] `computeFaltantes(db, hoy)` en `src/lib/gondola.js`:
+  - **Días abiertos**: los días con al menos una venta en el negocio.
+  - **Frecuencia** de cada artículo: en qué parte de los días abiertos de las 8 semanas anteriores (sin la última) se vendió. Entran los que se vendieron en al menos la mitad.
+  - **Días sin venta**: días abiertos completos desde su última venta (el día de hoy no cuenta, porque está en curso).
+  - **Aviso** si la probabilidad de no vender esos días por azar, `(1 − frecuencia) ^ días`, es menor al 2% y pasaron 2 días o más. Por ejemplo, un artículo que se vende 9 de cada 10 días salta a los 2 días; uno que se vende la mitad de los días, a los 6.
+  - Orden: lo que se deja de facturar por día primero.
+- [x] Front: en Góndola, "Probablemente faltan", con "Se vendía 9 de cada 10 días · última venta: mié 30/9 · $2k por día" y "hace N días".
+
+## Fase 14: mapa de calor día × hora ✅ (2026-10-16)
+
+Objetivo: ver cuándo hay más clientes, para decidir cuántas cajas abrir y cuándo reponer.
+
+- [x] `computeMapaCalor(db, hasta)` en `src/lib/metrics.js`: **compras promedio por hora**, para cada día de la semana, en las 8 semanas completas hasta el último día con datos. Se divide por la cantidad de ese día de la semana con ventas (un feriado cerrado no baja el promedio). El tooltip suma lo vendido promedio.
+- [x] Horas que se muestran: las que tienen al menos una compra por semana, en el bloque continuo con más compras (un corte de hasta 3 horas, como la siesta, queda adentro). Las ventas sueltas de madrugada quedan afuera.
+- [x] Front: en Histórico, "Cuándo viene la gente": tabla de celdas (lunes a domingo × horas) con un solo color, de claro a oscuro (dataviz: secuencial). Cada celda tiene su número en el tooltip y en `aria-label`.
+
+## Fase 15: artículos que se compran juntos ✅ (2026-10-16)
+
+Objetivo: ideas para combos y para ubicar productos cerca en la góndola.
+
+- [x] `computeJuntos(db, filtered)` en `src/lib/productos.js`: pares de artículos en la misma compra. Para cada par: compras en las que aparecen juntos y **cuántas veces más de lo esperado al azar** (lift = P(A y B) / (P(A) × P(B))).
+  - Entran los pares con 1,5 veces o más y al menos 5 compras juntos (o el 0,2% de las compras, lo que sea mayor). Se muestran los 10 con más compras juntos.
+  - Hacen falta al menos 200 compras en el período. Si hay menos, se pide elegir un período más largo.
+  - Las compras de más de 40 artículos distintos no cuentan, para que el cálculo no se dispare.
+- [x] Front: en Productos, "Se compran juntos".
+
+## Fase 16: Pareto de artículos (ABC) ✅ (2026-10-16)
+
+Objetivo: saber qué artículos hacen la mayor parte de la venta, los que nunca pueden faltar.
+
+- [x] `computePareto(db, filtered)` en `src/lib/productos.js`: artículos ordenados por lo que facturaron. **A**: hasta el 80% de la venta, **B**: del 80% al 95%, **C**: el resto.
+- [x] Front: en Productos, "Los que hacen la venta". Muestra cuántos artículos son A y qué parte del total de artículos vendidos representan, con barras de "parte de los artículos" contra "parte de la venta" y la lista de los A.
+
+## Fase 17: comparación con otros períodos ✅ (2026-10-16)
+
+Objetivo: saber si un día o una semana fue buena, comparada con algo justo.
+
+- [x] `computeComparacion(db, period, hasta)` en `src/lib/metrics.js`:
+  - **Semanas antes**: el mismo rango corrido una semana, o las semanas que hagan falta para que no se pise con el elegido. Coinciden los días de la semana (un lunes contra un lunes).
+  - **Hace un año**: el mismo rango 364 días antes (52 semanas, mismo día de la semana), **ajustado por el IPC** de los 12 meses.
+  - Si el período termina en el día de los datos y ese día está en curso, a ese día en la comparación se lo corta a la hora de la última venta. Así "hoy hasta las 11" se compara con "el jueves pasado hasta las 11".
+  - Se respeta la franja horaria elegida.
+- [x] Front: en Ventas, debajo de la venta total, "Comparado con": las dos filas con su rango de fechas, el importe y la variación.
+
+## Fase 18: control de caja y anulaciones por cajero ⛔ (descartada con los datos actuales, 2026-10-16)
+
+Era la idea de prevención de pérdidas: arqueo por turno (caja inicial + efectivo − retiros) y anulaciones por cajero. **Con cómo se usa hoy el POS no hay datos para hacerlo**:
+- **Caja**: en 6 años hubo 18 aperturas y 14 cierres. Las del 2026 son el 03/06 (retiro de $638M, lo acumulado desde octubre de 2024), el 07/06 y el 08/06. Un arqueo por turno necesita una apertura y un cierre por día o por turno.
+- **Anulaciones**: hay solo 2 órdenes `CANCELLED`, ambas de 2025 y con totales absurdos. Las ventas que se cancelan antes de cobrar no quedan registradas, o el POS las borra.
+
+Qué tendría que cambiar para retomarla:
+- [ ] 🧑 Que los cajeros **abran y cierren la caja todos los días** (o en cada turno) en el POS, cargando la caja inicial y el retiro del cierre.
+- [ ] Confirmar cómo deja el POS en el `.log` una venta anulada después de cobrada (ver "Pendientes de datos": anular una venta de prueba).
+- [ ] Con 2 o 3 semanas de cierres diarios, rehacer el diseño: por cierre, efectivo esperado (caja inicial + ventas en efectivo + cobros − retiros) contra lo retirado. Resolver antes las 818 ventas con pagos mixtos donde la caja no coincide con el total.
+
+## Verificación de las Fases 12 a 17
+
+Hecha el 2026-10-16 con la copia del 15/10 a las 20:34 (`.script` + `.log`). Con la foto completa, cada cálculo tarda menos de 250 ms en Node.
+
+- [x] **Precios (12)**: de los 150 artículos, 100 tienen el mismo precio hace 45 días o más y 50 cambiaron. Arriba de todo: Arvejas Molto, $700 desde el 19/04/2024 (+103% de inflación desde entonces); Manteca SyS x100, $1.600 desde el 08/07/2024 (+82%); Tostadas de arroz Leiva, $1.400 desde el 25/10/2024 (+70%).
+- [x] **Inflación propia (12)**: septiembre de 2025 a septiembre de 2026, con 100 artículos: **tus precios +28,2%, IPC de alimentos +35,2%**.
+- [x] **Faltantes (13)**: con fecha 15/10 aparecen Papel Higienol x4 (se vendía la mitad de los días, sin ventas desde el 30/09) y Azúcar Marolio 1 kg (desde el 01/10). Con fecha 16/10 se suma Azúcar Azumen 1 kg.
+- [x] **Mapa de calor (14)**: del 21/08 al 15/10, de 9 a 22 h. Pico: domingo de 12 a 13 h (23 compras promedio). Se ve el corte de la siesta (15 a 17 h) y que el domingo a la tarde está cerrado.
+- [x] **Comparación (17)**: el 15/10 hasta las 20:34 da −30,6% contra el 08/10 a la misma hora y +2,2% contra el 16/10/2025 ajustado. Del 1 al 15/10 da +19,1% contra el 10 al 24/09 y −12,8% contra el año anterior ajustado (factor 1,322, con el IPC hasta septiembre).
+- [x] **Pareto (16)**: del 1 al 15/10, 387 de 941 artículos (41%) hacen el 80% de la venta.
+- [x] **Juntos (15)**: el 15/10 (63 compras) pide un período más largo. En lo que va de 2026: Talca x3L + Ternuva tinto, 119 compras juntos (8,8 veces más que por casualidad).
+- [x] `npm run lint` sin errores y `vite build` bien. Capturas a 500 px de ancho (modo oscuro) de Ventas, Productos, Góndola e Histórico con el server local: sin cortes ni superposiciones. La navegación de abajo pasa a 5 pestañas.
+- [ ] 🧑 Publicar el front (`npm run deploy:front -- --preview`, revisar en el celular, después `npm run deploy:front`). Los datos no cambian: no hace falta tocar la PC del POS.
+- [ ] 🧑 Probar en iPhone y Android: el mapa de calor con el dedo y las 5 pestañas en un Android de 360 px.
 
 ## Pendientes de datos y bugs conocidos
 

@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { Panel, Stats, Delta } from "../components/ui.jsx";
 import { AnnualBars, IpcBars } from "../components/charts.jsx";
-import { computeAnual, computeHistorico } from "../lib/metrics.js";
-import { MESES_NOMBRE } from "../lib/dates.js";
+import { computeAnual, computeHistorico, computeMapaCalor } from "../lib/metrics.js";
+import { Heatmap } from "../components/Heatmap.jsx";
+import { MESES_NOMBRE, fromYMD } from "../lib/dates.js";
 import { ultimoIpc, ipcDe, IPC_FUENTE } from "../lib/ipc.js";
 import { ars, arsShort, num, pct } from "../lib/format.js";
 
@@ -14,6 +15,8 @@ export default function HistoricoPage({ db }) {
   const esActual = year === hoyYear;
   const anual = useMemo(() => computeAnual(db, year, esActual), [db, year, esActual]);
   const ipc = ultimoIpc(ipcDe(db));
+  const mapa = useMemo(() => computeMapaCalor(db), [db]);
+  const fecha = ymd => { const d = fromYMD(ymd); return `${d.getDate()}/${d.getMonth() + 1}`; };
 
   return (
     <>
@@ -40,6 +43,14 @@ export default function HistoricoPage({ db }) {
           ))}
         </ol>
       </Panel>
+
+      {mapa && (
+        <Panel title="Cuándo viene la gente" wide
+          hint="Compras promedio por hora, cada día de la semana. Sirve para decidir cuántas cajas abrir y cuándo reponer. Tocá una celda para ver el detalle."
+          foot={`Últimas 8 semanas, del ${fecha(mapa.desde)} al ${fecha(mapa.hasta)}. Cada día se promedia entre los que tuvieron ventas.`}>
+          <Heatmap mapa={mapa} />
+        </Panel>
+      )}
 
       <Panel title="Año por año"
         hint={esActual

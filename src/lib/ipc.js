@@ -34,3 +34,15 @@ export function ultimoIpc(ipc = IPC) {
   }
   return null;
 }
+
+// Inflación acumulada entre dos meses: desde el mes siguiente a (y1, m1) hasta (y2, m2) inclusive.
+// Los meses sin dato todavía no suman. Devuelve el factor (1,05 = 5%).
+export function factorEntre(y1, m1, y2, m2, ipc = IPC) {
+  let f = 1;
+  for (let y = y1, m = m1 + 1; y < y2 || (y === y2 && m <= m2); m++) {
+    if (m > 11) { m = -1; y++; continue; }
+    const v = (ipc[y] || [])[m];
+    if (v != null) f *= 1 + v / 100;
+  }
+  return f;
+}

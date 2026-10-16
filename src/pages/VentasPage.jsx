@@ -1,11 +1,38 @@
 import { useMemo } from "react";
-import { PriceTag, Kpis, Panel, Stats, BarRows } from "../components/ui.jsx";
+import { PriceTag, Kpis, Panel, Stats, BarRows, Delta } from "../components/ui.jsx";
 import { TimeBars, TicketHistogram } from "../components/charts.jsx";
 import { describeDates, describeTimes } from "../lib/period.js";
-import { computeHistograma } from "../lib/metrics.js";
+import { computeHistograma, computeComparacion } from "../lib/metrics.js";
 import { ars, arsShort, num, pct } from "../lib/format.js";
 
-export default function VentasPage({ metrics, filtered, period }) {
+function Comparacion({ comp, period }) {
+  if (!comp?.filas.length) return null;
+  const franja = describeTimes(period);
+  return (
+    <Panel title="Comparado con" wide
+      hint={`Los mismos días de la semana${franja ? `, ${franja}` : ""}${comp.corte ? `. Como hoy sigue abierto, el último día se cuenta hasta las ${comp.corte}` : ""}.`}
+      foot={comp.filas.some(f => f.id === "anio") ? "Hace un año: lo vendido entonces, llevado a pesos de hoy con la inflación de alimentos del INDEC." : null}>
+      <ol className="list">
+        {comp.filas.map(f => (
+          <li key={f.id}>
+            <div className="list__top">
+              <span className="list__name">{f.label}</span>
+              <span className="list__value">{ars(f.total)}</span>
+            </div>
+            <div className="list__meta">
+              <span>{describeDates(f)}</span>
+              {f.delta != null && <span>El período elegido: <Delta value={f.delta} /></span>}
+              {f.sinAjuste != null && <span>Sin ajustar: {arsShort(f.sinAjuste)}</span>}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </Panel>
+  );
+}
+
+export default function VentasPage({ db, metrics, filtered, period }) {
+  const comp = useMemo(() => computeComparacion(db, filtered, period), [db, filtered, period]);
   const hist = useMemo(() => filtered.length >= 5 ? computeHistograma(filtered, metrics.ticketProm) : null, [filtered, metrics.ticketProm]);
   const times = describeTimes(period);
 
@@ -27,6 +54,8 @@ export default function VentasPage({ metrics, filtered, period }) {
           { label: "Unidades", value: num(metrics.totalUnidades) },
         ]} />
       </div>
+
+      <Comparacion comp={comp} period={period} />
 
       <Panel title={metrics.singleDay ? "Ventas por hora" : "Ventas por día"}
         hint={metrics.singleDay ? "Tocá una barra para ver el importe de esa hora." : "Tocá una barra para ver el importe del día."}>
