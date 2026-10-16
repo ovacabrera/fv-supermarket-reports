@@ -16,7 +16,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - ✅ **Rediseño publicado (Fase 8)**: reportes nuevos, pensados para el celular, probados en iPhone y Android el 2026-10-14.
 - ✅ **En producción desde la PC del POS** (2026-10-16): instalada (P3) y publicando sola con el Programador de tareas a las **10, 14, 19 y 22 h** (P5). Probado con "Ejecutar" desde el Programador.
 - ✅ **Usuarios con acceso** (P6, 2026-10-16) y **actualización automática verificada**: la ejecución de las 14:00 actualizó los datos sola.
-- 🟡 **Front y datos separados (Fase 11)**: hecho en el repo el 2026-10-16. La PC del POS sube solo los datos a Workers KV y el front se publica aparte desde la Mac (`npm run deploy:front`). Probado en preview; falta el pase a producción (ver la Fase 11).
+- ✅ **Front y datos separados (Fase 11)**, en producción el 2026-10-16: la PC del POS sube solo los datos a Workers KV (en partes de 256 KB) y el front se publica aparte desde la Mac con `npm run deploy:front`. Falta ver que una publicación programada ande sola con el código nuevo.
 - ⬜ Falta corregir los datos que distorsionan los reportes (P7, con los ajustes del cliente de la Fase 10).
 - ⬜ **Repo de GitHub público**: por ahora se deja así, a propósito (ver P1).
 - 🟡 **Fase 7 (leer también el `.log`)**: hecha en el repo y publicada el 2026-10-15 con las ventas del día incluidas. El 2026-10-16 se confirmó en la PC del POS que Node lee `fvposdb.log` con el POS abierto. Falta la verificación contra el checkpoint del día siguiente.
@@ -550,7 +550,7 @@ buildSnapshot({ conector, raw, ajustes, ipc }, info) → { snap, info }
 - Nombres atados a FácilVirtual en el proyecto: repo `fv-supermarket-reports`, proyecto de Pages `panel-ventas-fv`.
 - Varias instalaciones o negocios: cada uno con su PC, su `.env`, su proyecto de Pages y su grupo de Access. Esta fase no cubre un panel con varios negocios a la vez.
 
-## Fase 11: front y datos separados (Workers KV) 🟡 (hecha en el repo; falta el pase a producción)
+## Fase 11: front y datos separados (Workers KV) ✅ (en producción el 2026-10-16; falta ver una publicación programada)
 
 Problema: Cloudflare Pages reemplaza el sitio entero en cada deploy, así que los datos tenían que ir en el mismo paquete que el front. Una versión nueva del front solo podía salir de la PC del POS (la única con la base actual); desde otra máquina se publicaban datos viejos. Además, cada actualización de datos contaba como deploy.
 
@@ -583,11 +583,11 @@ Hasta el paso 3, producción sigue con el último deploy de la PC del POS (front
 
 - [x] 🧑 **0. Probar preview en el celular**: abrir `https://preview.panel-ventas-fv.pages.dev` (pide el código de Access de nuevo, es otro subdominio). Tiene que mostrar los reportes con "Datos al 15/10 20:34" (la foto de prueba que subió la Mac al KV).
 - [x] 🧑 **1. Token de la PC del POS**: dash.cloudflare.com → My Profile → API Tokens → el token de la PC del POS → *Edit* → agregar **Account → Workers KV Storage → Edit** → guardar. El valor del token no cambia, el `.env` queda igual. (Si Cloudflare obliga a crear uno nuevo, reemplazarlo en el `.env`.)
-- [ ] 🧑 **2. PC del POS**: `git pull` y después `scripts\publish-task.cmd`. En `logs\publish.log` tiene que terminar con `✓ Datos publicados`. Esto pisa en el KV la foto de prueba con la del día.
+- [x] 🧑 **2. PC del POS**: `git pull` y después `scripts\publish-task.cmd`. En `logs\publish.log` tiene que terminar con `✓ Datos publicados`. Esto pisa en el KV la foto de prueba con la del día.
   - Si falla con `HTTP 403` o un error de autenticación, falta el permiso del paso 1.
   - El primer intento (2026-10-16) falló con `fetch failed` al subir la foto entera: arreglado subiéndola en partes (ver arriba). Hay que volver a hacer `git pull`.
 - [x] **3. Front a producción**: `npm run deploy:front`. Hecho el 2026-10-16: primero a las 20:46 desde otra sesión (con la función de una sola clave) y a las 21:00 con la función de partes (`b1937ed`). Producción ya lee del KV; hasta que la PC del POS publique con el código nuevo, muestra la foto de prueba del 15/10.
-- [ ] 🧑 **4. Comprobar en el celular**: ↻ Actualizar en `https://panel-ventas-fv.pages.dev` → "Datos al …" con la hora de la publicación del paso 2, y "Este mes" con "1 oct – 16 oct".
+- [x] 🧑 **4. Comprobar en el celular** (2026-10-16, todo bien): ↻ Actualizar en `https://panel-ventas-fv.pages.dev` → "Datos al …" con la hora de la publicación del paso 2, y "Este mes" con "1 oct – 16 oct".
 - [ ] 🧑 **5. Esperar una publicación programada** (10, 14, 19 o 22 h) y confirmar que "Datos al …" se actualiza solo.
 
 ### Notas
