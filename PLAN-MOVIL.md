@@ -281,8 +281,19 @@ Commit `9628dda`.
 
 ## Fase 6: optimizaciones (si hace falta) ⬜
 
-- [ ] Si el snapshot crece mucho: detalle completo solo de los últimos 13 meses y totales ya sumados por día para la pestaña Histórico.
-- [ ] Code-splitting: hoy el bundle de Vite pesa más de 500 kB.
+Objetivo: que la app siga abriendo rápido en el celular a medida que crecen los datos. No agrega nada visible; es una fase de reserva por si aparece lentitud.
+
+- [ ] **Achicar el snapshot si crece mucho**: detalle completo solo de los últimos 13 meses y totales ya sumados por día para la pestaña Histórico.
+  - Por qué: hoy `snapshot.json.gz` (~4,3 MB) trae todas las órdenes con sus líneas desde el primer día de la base. Crece todos los días, y con él la descarga en el celular (sobre todo con datos móviles), la decodificación al abrir (hoy ~1,3–1,6 s) y lo que ocupa en IndexedDB.
+  - 13 meses alcanzan para comparar contra el mismo mes del año anterior. De los años más viejos el Histórico solo usa totales por día. Así el archivo deja de crecer sin límite.
+- [ ] **Code-splitting**: hoy el bundle de Vite pesa más de 500 kB en un solo archivo (Vite ya avisa al compilar).
+  - Partirlo en pedazos para que la primera pantalla cargue rápido y el resto (por ejemplo, los gráficos de pestañas que no se están mirando) se baje recién al abrirlo.
+
+**Cuándo retomarla**: hoy no hace falta (Fase 4: cargas de 1–2 s, y en el iPhone anduvo bien). Conviene encararla si:
+
+- la app tarda varios segundos en abrir en el celular;
+- el `.gz` se acerca a 10–15 MB (el límite de Cloudflare Pages es 25 MiB por archivo);
+- con la Fase 5 (PWA) hecha, la primera instalación se hace pesada.
 
 ## Fase 7: el parser lee `.script` + `.log` (datos al momento) 🟡 (hecha y publicada; falta la verificación con el checkpoint)
 
