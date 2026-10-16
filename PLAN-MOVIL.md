@@ -21,7 +21,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - ⬜ **Repo de GitHub público**: por ahora se deja así, a propósito (ver P1).
 - 🟡 **Fase 7 (leer también el `.log`)**: hecha en el repo y publicada el 2026-10-15 con las ventas del día incluidas. El 2026-10-16 se confirmó en la PC del POS que Node lee `fvposdb.log` con el POS abierto. Falta la verificación contra el checkpoint del día siguiente.
 - 🟡 **IPC (Fase 9)**: hecha en el repo el 2026-10-15. Cada publicación baja del CSV oficial del INDEC el rubro **Alimentos y bebidas no alcohólicas** (nacional) y lo mete en la foto. Publicada el 2026-10-15. Falta ver en noviembre que tome sola el dato de octubre.
-- 🟡 **Reportes nuevos (Fases 12 a 17)**: hechos en el repo el 2026-10-16. Hay una sección nueva, **Góndola**, con precios sin actualizar, inflación propia y faltantes probables. Además: comparación con otros períodos en Ventas, Pareto y pares en Productos, y mapa de calor en Histórico. Falta publicar el front. La **Fase 18** (caja y anulaciones) se descartó: no hay datos.
+- ✅ **Reportes nuevos (Fases 12 a 17)**: publicados en producción el 2026-10-16. Hay una sección nueva, **Góndola**, con precios sin actualizar, inflación propia y faltantes probables. Además: comparación con otros períodos en Ventas, Pareto y pares en Productos, y mapa de calor en Histórico. La **Fase 18** (caja y anulaciones) se descartó: no hay datos.
 - ⬜ Después: **Fase 5** (PWA, con la identidad visual nueva).
 - ⬜ **Fase 10 (conectores)**: que los reportes anden con otros sistemas de punto de venta. Se elige la fuente al instalar (`FUENTE=facilvirtual-v1`, …) y cada conector arma la misma foto.
 
@@ -706,7 +706,7 @@ Hecha el 2026-10-16 con la copia del 15/10 a las 20:34 (`.script` + `.log`). Con
 - [x] **Pareto (16)**: del 1 al 15/10, 387 de 941 artículos (41%) hacen el 80% de la venta.
 - [x] **Juntos (15)**: el 15/10 (63 compras) pide un período más largo. En lo que va de 2026: Talca x3L + Ternuva tinto, 119 compras juntos (8,8 veces más que por casualidad).
 - [x] `npm run lint` sin errores y `vite build` bien. Capturas a 500 px de ancho (modo oscuro) de Ventas, Productos, Góndola e Histórico con el server local: sin cortes ni superposiciones. La navegación de abajo pasa a 5 pestañas.
-- [ ] 🧑 Publicar el front (`npm run deploy:front -- --preview`, revisar en el celular, después `npm run deploy:front`). Los datos no cambian: no hace falta tocar la PC del POS.
+- [x] Publicar el front: probado en preview y publicado en producción el 2026-10-16 con `npm run deploy:front`. Los datos no cambian: no hace falta tocar la PC del POS.
 - [ ] 🧑 Probar en iPhone y Android: el mapa de calor con el dedo y las 5 pestañas en un Android de 360 px.
 
 ## Pendientes de datos y bugs conocidos
