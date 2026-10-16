@@ -581,12 +581,12 @@ Mac ── npm run deploy:front ──► Pages + functions/data/[[path]].js ─
 
 Hasta el paso 3, producción sigue con el último deploy de la PC del POS (front + datos en el paquete), sin cortes.
 
-- [ ] 🧑 **0. Probar preview en el celular**: abrir `https://preview.panel-ventas-fv.pages.dev` (pide el código de Access de nuevo, es otro subdominio). Tiene que mostrar los reportes con "Datos al 15/10 20:34" (la foto de prueba que subió la Mac al KV).
-- [ ] 🧑 **1. Token de la PC del POS**: dash.cloudflare.com → My Profile → API Tokens → el token de la PC del POS → *Edit* → agregar **Account → Workers KV Storage → Edit** → guardar. El valor del token no cambia, el `.env` queda igual. (Si Cloudflare obliga a crear uno nuevo, reemplazarlo en el `.env`.)
+- [x] 🧑 **0. Probar preview en el celular**: abrir `https://preview.panel-ventas-fv.pages.dev` (pide el código de Access de nuevo, es otro subdominio). Tiene que mostrar los reportes con "Datos al 15/10 20:34" (la foto de prueba que subió la Mac al KV).
+- [x] 🧑 **1. Token de la PC del POS**: dash.cloudflare.com → My Profile → API Tokens → el token de la PC del POS → *Edit* → agregar **Account → Workers KV Storage → Edit** → guardar. El valor del token no cambia, el `.env` queda igual. (Si Cloudflare obliga a crear uno nuevo, reemplazarlo en el `.env`.)
 - [ ] 🧑 **2. PC del POS**: `git pull` y después `scripts\publish-task.cmd`. En `logs\publish.log` tiene que terminar con `✓ Datos publicados`. Esto pisa en el KV la foto de prueba con la del día.
   - Si falla con `HTTP 403` o un error de autenticación, falta el permiso del paso 1.
   - El primer intento (2026-10-16) falló con `fetch failed` al subir la foto entera: arreglado subiéndola en partes (ver arriba). Hay que volver a hacer `git pull`.
-- [ ] **3. Front a producción**: `npm run deploy:front`, desde la Mac o desde la PC del POS. Recién acá producción empieza a leer del KV.
+- [x] **3. Front a producción**: `npm run deploy:front`. Hecho el 2026-10-16: primero a las 20:46 desde otra sesión (con la función de una sola clave) y a las 21:00 con la función de partes (`b1937ed`). Producción ya lee del KV; hasta que la PC del POS publique con el código nuevo, muestra la foto de prueba del 15/10.
 - [ ] 🧑 **4. Comprobar en el celular**: ↻ Actualizar en `https://panel-ventas-fv.pages.dev` → "Datos al …" con la hora de la publicación del paso 2, y "Este mes" con "1 oct – 16 oct".
 - [ ] 🧑 **5. Esperar una publicación programada** (10, 14, 19 o 22 h) y confirmar que "Datos al …" se actualiza solo.
 
