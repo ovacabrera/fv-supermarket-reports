@@ -425,3 +425,12 @@ button:disabled { cursor: default; }
 .abc__label { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
 .abc__bar { display: flex; gap: 2px; height: 26px; border-radius: var(--r-sm); overflow: hidden; }
 .abc__bar i { display: grid; place-items: center; min-width: 3px; font-style: normal; font-size: 12px; font-weight: 600; color: #fff; overflow: hidden; white-space: nowrap; }
+
+/* Botón de copiar el nombre de un artículo (área táctil de 40 px, ícono chico) */
+.list__top:has(.copy) { align-items: flex-start; }
+.copy {
+  flex: none; display: inline-grid; place-items: center; width: 40px; height: 40px; margin: -10px -10px -10px -4px;
+  border: 0; border-radius: var(--r-sm); background: none; color: var(--muted);
+}
+.copy:hover, .copy:focus-visible { color: var(--ink); background: var(--surface-2); }
+.copy.is-ok { color: var(--up); }

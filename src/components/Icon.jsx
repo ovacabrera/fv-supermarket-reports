@@ -12,6 +12,8 @@ const PATHS = {
   close: <path d="M6 6l12 12M18 6 6 18" />,
   warning: <><path d="M12 3 2 20h20L12 3Z" /><path d="M12 10v4M12 17v.5" /></>,
   file: <><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5Z" /><path d="M14 3v5h5" /></>,
+  copy: <><rect x="8.5" y="8.5" width="12" height="12" rx="2" /><path d="M15.5 8.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5" /></>,
+  check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   up: <path d="M12 19V5m-6 6 6-6 6 6" />,
   down: <path d="M12 5v14m-6-6 6 6 6-6" />,
 };

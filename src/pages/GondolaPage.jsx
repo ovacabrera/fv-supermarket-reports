@@ -1,12 +1,20 @@
 import { useMemo, useState } from "react";
 import { Panel, Stats } from "../components/ui.jsx";
 import { InflacionLines } from "../components/charts.jsx";
+import { CopyButton } from "../components/CopyButton.jsx";
 import { computePrecios, computeInflacionPropia, computeFaltantes } from "../lib/gondola.js";
-import { DIAS_CORTO, MESES_NOMBRE, fromYMD } from "../lib/dates.js";
+import { DIAS_CORTO, MESES_NOMBRE, fromYMD, toYMD } from "../lib/dates.js";
 import { ars, arsShort, num, pct } from "../lib/format.js";
 
 const fechaCorta = d => `${d.getDate()} ${MESES_NOMBRE[d.getMonth()].slice(0, 3).toLowerCase()}${d.getFullYear() !== new Date().getFullYear() ? ` ${d.getFullYear()}` : ""}`;
 const hace = dias => dias >= 60 ? `${Math.floor(dias / 30)} meses` : `${dias} días`;
+// "hoy", "ayer" o "mié 7 oct · hace 9 días", contando días de calendario.
+function ultimaVentaTxt(d) {
+  const dias = Math.round((fromYMD(toYMD(new Date())) - fromYMD(toYMD(d))) / 864e5);
+  if (dias <= 0) return "hoy";
+  if (dias === 1) return "ayer";
+  return `${DIAS_CORTO[d.getDay()].toLowerCase()} ${fechaCorta(d)} · hace ${hace(dias)}`;
+}
 
 function VerMas({ total, visibles, all, onToggle, label }) {
   if (total <= visibles) return null;
@@ -62,14 +70,13 @@ function PreciosViejos({ precios }) {
                 <div className="list__top">
                   <span className="list__name">{f.name}</span>
                   <span className="list__value">{ars(f.precio)}</span>
+                  <CopyButton text={f.name} />
                 </div>
                 <div className="list__meta">
-                  {grupo === "sinVentas"
-                    ? <span>Última venta: {fechaCorta(f.ultimaVenta)} · hace {hace(f.sinVenta)}</span>
-                    : <span>Mismo precio desde el {fechaCorta(f.desde)} · hace {hace(f.dias)}</span>}
+                  {grupo !== "sinVentas" && <span>Mismo precio desde el {fechaCorta(f.desde)} · hace {hace(f.dias)}</span>}
                   {grupo !== "sinVentas" && f.inflacion >= 0.5 && <span>Inflación desde entonces <span className="is-strong">{pct(f.inflacion)}</span></span>}
                   {grupo !== "sinVentas" && f.inflacion >= 0.5 && <span>Con inflación: <span className="is-strong">{ars(f.precioConInflacion)}</span></span>}
-                  <span>Se vendió {num(f.semanasConVenta)} de 13 semanas · {arsShort(f.venta)}</span>
+                  <span>Última venta: <span className="is-strong">{ultimaVentaTxt(f.ultimaVenta)}</span></span>
                 </div>
               </li>
             ))}
@@ -117,6 +124,7 @@ function Faltantes({ falt }) {
                 <div className="list__top">
                   <span className="list__name">{f.name}</span>
                   <span className="list__value">hace {f.gap} días</span>
+                  <CopyButton text={f.name} />
                 </div>
                 <div className="list__meta">
                   <span>Se vendía {Math.round(f.frecuencia * 10)} de cada 10 días</span>
