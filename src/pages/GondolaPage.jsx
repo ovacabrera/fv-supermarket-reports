@@ -17,19 +17,43 @@ function VerMas({ total, visibles, all, onToggle, label }) {
   );
 }
 
+const GRUPOS = [
+  { id: "alta", label: "Alta rotación",
+    hint: "Se vendieron en 8 o más de las últimas 13 semanas y se siguen vendiendo, con el mismo precio hace 45 días o más. Son los que más pesan: primero, los que más inflación acumularon desde el último cambio.",
+    vacio: "Todos los artículos de alta rotación cambiaron de precio en los últimos 45 días." },
+  { id: "baja", label: "Baja rotación",
+    hint: "Se venden algunas semanas sí y otras no, con el mismo precio hace 45 días o más. Primero, los que más facturaron en las últimas 13 semanas.",
+    vacio: "No hay artículos de baja rotación con precio viejo." },
+  { id: "sinVentas", label: "Sin ventas",
+    hint: "Se vendían y dejaron de salir: faltan, cambiaron de código de barras o no vienen más. Si entró uno nuevo en su lugar, revisá que tenga el precio actualizado. Primero, los que más facturaban.",
+    vacio: "No hay artículos que hayan dejado de venderse." },
+];
+
 function PreciosViejos({ precios }) {
+  const [grupo, setGrupo] = useState("alta");
   const [all, setAll] = useState(false);
-  const { filas, revisados, recientes, ipcHasta } = precios;
+  const { grupos, recientes, ipcHasta } = precios;
+  const g = GRUPOS.find(x => x.id === grupo);
+  const filas = grupos[grupo];
   const visibles = all ? filas : filas.slice(0, 8);
   const hasta = ipcHasta ? `${MESES_NOMBRE[ipcHasta.month].toLowerCase()} de ${ipcHasta.year}` : null;
+  const elegir = id => { setGrupo(id); setAll(false); };
   return (
     <Panel title="Precios sin actualizar" wide
-      hint={`De los ${revisados} artículos que más se vendieron en los últimos 90 días, los que hace 45 días o más se cobran igual. Primero, los que más inflación acumularon desde el último cambio.`}
+      hint="Artículos vendidos en las últimas 13 semanas, separados por cuánto se venden. Los que dejaron de salir van aparte: su precio viejo ya no se está cobrando."
       foot={hasta && `Precio con inflación: el actual más la inflación de alimentos del INDEC desde el mes siguiente al cambio, con datos hasta ${hasta}. Es una referencia: sin las compras cargadas, no se sabe cuánto aumentó cada proveedor.`}>
       <Stats items={[
-        { label: "Con el mismo precio hace 45 días o más", value: num(filas.length) },
-        { label: "Cambiaron de precio hace menos", value: num(recientes) },
+        { label: "Alta rotación con precio viejo", value: num(grupos.alta.length) },
+        { label: "Alta rotación actualizados en 45 días", value: num(recientes.alta) },
       ]} />
+      <div className="seg" role="group" aria-label="Grupo de artículos" style={{ marginBottom: 12 }}>
+        {GRUPOS.map(x => (
+          <button key={x.id} type="button" aria-pressed={grupo === x.id} onClick={() => elegir(x.id)}>
+            {x.label}<br />({num(grupos[x.id].length)})
+          </button>
+        ))}
+      </div>
+      <p className="panel__hint" style={{ marginBottom: 12 }}>{g.hint}</p>
       {filas.length ? (
         <>
           <ol className="list">
@@ -40,16 +64,19 @@ function PreciosViejos({ precios }) {
                   <span className="list__value">{ars(f.precio)}</span>
                 </div>
                 <div className="list__meta">
-                  <span>Desde el {fechaCorta(f.desde)} · hace {hace(f.dias)}</span>
-                  {f.inflacion >= 0.5 && <span>Inflación desde entonces <span className="is-strong">{pct(f.inflacion)}</span></span>}
-                  {f.inflacion >= 0.5 && <span>Con inflación: <span className="is-strong">{ars(f.precioConInflacion)}</span></span>}
+                  {grupo === "sinVentas"
+                    ? <span>Última venta: {fechaCorta(f.ultimaVenta)} · hace {hace(f.sinVenta)}</span>
+                    : <span>Mismo precio desde el {fechaCorta(f.desde)} · hace {hace(f.dias)}</span>}
+                  {grupo !== "sinVentas" && f.inflacion >= 0.5 && <span>Inflación desde entonces <span className="is-strong">{pct(f.inflacion)}</span></span>}
+                  {grupo !== "sinVentas" && f.inflacion >= 0.5 && <span>Con inflación: <span className="is-strong">{ars(f.precioConInflacion)}</span></span>}
+                  <span>Se vendió {num(f.semanasConVenta)} de 13 semanas · {arsShort(f.venta)}</span>
                 </div>
               </li>
             ))}
           </ol>
           <VerMas total={filas.length} visibles={8} all={all} onToggle={() => setAll(a => !a)} label="Ver todos" />
         </>
-      ) : <p className="panel__hint">Todos los artículos que más se venden cambiaron de precio en los últimos 45 días.</p>}
+      ) : <p className="panel__hint">{g.vacio}</p>}
     </Panel>
   );
 }

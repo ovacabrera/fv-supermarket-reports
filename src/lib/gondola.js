@@ -9,7 +9,10 @@ import { FIAMBR_PROD_ID, MAX_ORDEN_RAZONABLE, lastSaleDate } from "./metrics.js"
 const DIA = 864e5;
 
 // Precios sin actualizar
-const TOP_PRECIOS = 150;          // artículos que más facturaron en los últimos 90 días
+const SEMANAS_ROTACION = 13;      // se miran las ventas de las últimas 13 semanas (~90 días)
+const SEMANAS_ALTA = 8;           // alta rotación: se vendió en 8 o más de esas semanas
+const DIAS_SIN_VENTA = 14;        // mínimo de días sin venta para decir que ya no se vende
+const DIAS_SIN_VENTA_MAX = 45;    // con más días sin venta, ya no se vende aunque sea de baja rotación
 const DIAS_SIN_CAMBIO = 45;
 const TOLERANCIA_PRECIO = 0.01;   // ±1%: redondeo de los artículos por peso
 // Inflación de la góndola
@@ -38,42 +41,47 @@ function median(values) {
 }
 
 // ── Precios sin actualizar ────────────────────────────────────────────────────
-// Para los artículos que más venden: precio de la última venta, desde cuándo se cobra
-// ese precio y cuánta inflación de alimentos hubo desde entonces.
+// Para cada artículo vendido en las últimas 13 semanas: precio de la última venta, desde cuándo
+// se cobra ese precio y cuánta inflación de alimentos hubo desde entonces. Se separan en:
+//   alta   se vendió en 8 o más de las 13 semanas y se sigue vendiendo;
+//   baja   se vendió en menos semanas y se sigue vendiendo;
+//   sinVentas  no sale hace más de 14 días y más de 3 veces lo que suele tardar entre ventas,
+//          o hace más de 45 (falta, cambió de código o no viene más): su precio viejo no se cobra.
+// Alta, por inflación desde el último cambio; baja y sin ventas, por lo que facturaron.
 export function computePrecios(db) {
   const fin = lastSaleDate(db);
   if (!fin) return null;
   const fecha = fechasDeOrdenes(db);
-  const desde90 = fin.getTime() - 90 * DIA;
-  const desde30 = fin.getTime() - 30 * DIA;
+  const desde = fin.getTime() - SEMANAS_ROTACION * 7 * DIA;
 
-  const venta90 = new Map(), ultima = new Map();
+  const venta = new Map(), semanas = new Map(), dias = new Map(), ultima = new Map();
   for (const ol of db.orderLines) {
     if (!esArticulo(ol)) continue;
     const t = fecha.get(ol.orderId)?.getTime();
-    if (t === undefined || t < desde90) continue;
-    venta90.set(ol.productId, (venta90.get(ol.productId) || 0) + ol.subtotal);
-    if (t > (ultima.get(ol.productId) || 0)) ultima.set(ol.productId, t);
+    if (t === undefined || t < desde) continue;
+    const id = ol.productId;
+    venta.set(id, (venta.get(id) || 0) + ol.subtotal);
+    if (!semanas.has(id)) { semanas.set(id, new Set()); dias.set(id, new Set()); }
+    semanas.get(id).add(Math.floor((fin.getTime() - t) / (7 * DIA)));
+    dias.get(id).add(Math.floor((fin.getTime() - t) / DIA));
+    if (t > (ultima.get(id) || 0)) ultima.set(id, t);
   }
-  const elegidos = [...venta90.entries()]
-    .filter(([id]) => ultima.get(id) >= desde30)
-    .sort((a, b) => b[1] - a[1]).slice(0, TOP_PRECIOS).map(([id]) => id);
-  const set = new Set(elegidos);
 
-  // Todas las ventas de los elegidos (toda la historia: un precio puede no cambiar hace más de un año).
-  const ventas = new Map(elegidos.map(id => [id, []]));
+  // Todas las ventas de esos artículos (toda la historia: un precio puede no cambiar hace más de un año).
+  const ventas = new Map([...venta.keys()].map(id => [id, []]));
   for (const ol of db.orderLines) {
-    if (!set.has(ol.productId) || !(ol.qty > 0)) continue;
+    const v = ventas.get(ol.productId);
+    if (!v || !(ol.qty > 0)) continue;
     const d = fecha.get(ol.orderId);
-    if (d) ventas.get(ol.productId).push({ t: d.getTime(), precio: precioDe(ol) });
+    if (d) v.push({ t: d.getTime(), precio: precioDe(ol) });
   }
 
   const ipc = ipcDe(db);
   const ultimo = ultimoIpc(ipc);
-  const filas = [];
-  let recientes = 0;
-  for (const id of elegidos) {
-    const v = ventas.get(id).sort((a, b) => a.t - b.t);
+  const grupos = { alta: [], baja: [], sinVentas: [] };
+  const recientes = { alta: 0, baja: 0 };
+  for (const [id, v] of ventas) {
+    v.sort((a, b) => a.t - b.t);
     const precio = v[v.length - 1].precio;
     const igual = p => Math.abs(p - precio) <= precio * TOLERANCIA_PRECIO;
     // Racha final con este precio. Una venta suelta con otro precio (un precio cargado a mano)
@@ -83,19 +91,27 @@ export function computePrecios(db) {
       if (igual(v[i].precio)) { inicio = i; distintas = 0; }
       else if (++distintas === 2) break;
     }
-    const desde = new Date(v[inicio].t);
-    const dias = Math.floor((fin - desde) / DIA);
-    if (dias < DIAS_SIN_CAMBIO) { recientes++; continue; }
-    const factor = ultimo ? factorEntre(desde.getFullYear(), desde.getMonth(), ultimo.year, ultimo.month, ipc) : 1;
-    filas.push({
-      id, name: nombreDe(db, id), precio, desde, dias,
-      inflacion: (factor - 1) * 100,
-      precioConInflacion: precio * factor,
-      venta90: venta90.get(id),
-    });
+    const cambio = new Date(v[inicio].t);
+    const diasPrecio = Math.floor((fin - cambio) / DIA);
+    const semanasConVenta = semanas.get(id).size;
+    const intervalo = (SEMANAS_ROTACION * 7) / dias.get(id).size; // días promedio entre ventas
+    const sinVenta = Math.floor((fin.getTime() - ultima.get(id)) / DIA);
+    const rotacion = semanasConVenta >= SEMANAS_ALTA ? "alta" : "baja";
+    const factor = ultimo ? factorEntre(cambio.getFullYear(), cambio.getMonth(), ultimo.year, ultimo.month, ipc) : 1;
+    const fila = {
+      id, name: nombreDe(db, id), precio, desde: cambio, dias: diasPrecio, rotacion,
+      semanasConVenta, sinVenta, ultimaVenta: new Date(ultima.get(id)),
+      inflacion: (factor - 1) * 100, precioConInflacion: precio * factor, venta: venta.get(id),
+    };
+    if (sinVenta > Math.min(DIAS_SIN_VENTA_MAX, Math.max(DIAS_SIN_VENTA, intervalo * 3))) { grupos.sinVentas.push(fila); continue; }
+    if (diasPrecio < DIAS_SIN_CAMBIO) { recientes[rotacion]++; continue; }
+    grupos[rotacion].push(fila);
   }
-  filas.sort((a, b) => b.inflacion - a.inflacion || b.dias - a.dias);
-  return { filas, revisados: elegidos.length, recientes, ipcHasta: ultimo };
+  const porInflacion = (a, b) => b.inflacion - a.inflacion || b.venta - a.venta;
+  grupos.alta.sort(porInflacion);
+  grupos.baja.sort((a, b) => b.venta - a.venta);
+  grupos.sinVentas.sort((a, b) => b.venta - a.venta);
+  return { grupos, recientes, ipcHasta: ultimo };
 }
 
 // ── Inflación de la góndola ───────────────────────────────────────────────────

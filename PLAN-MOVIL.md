@@ -623,7 +623,13 @@ Objetivo: avisar qué artículos se siguen cobrando a un precio viejo mientras l
   - **Precio actual** de cada artículo: el de su última venta (`subtotal / qty`, redondeado a centavos).
   - **Desde cuándo**: la primera venta de la racha final con ese precio (tolerancia ±1%, para el redondeo de los artículos por peso).
   - **Inflación desde entonces**: IPC acumulado de alimentos desde el mes siguiente al cambio hasta el último dato del INDEC. "Precio con inflación" = precio × ese factor.
-  - Solo los **150 artículos que más facturaron en los últimos 90 días**, vendidos en los últimos 30, con **45 días o más sin cambio**. Orden: más inflación acumulada primero.
+  - ~~Solo los 150 artículos que más facturaron en los últimos 90 días, vendidos en los últimos 30.~~ Cambiado el 2026-10-16, a pedido del usuario: los artículos **cambian de código de barras** cuando el fabricante saca una etiqueta nueva, y el viejo deja de venderse con el precio sin actualizar. Además, el tope de 150 dejaba afuera a los de baja rotación.
+  - **Grupos por rotación** (todos los artículos vendidos en las últimas 13 semanas):
+    - **Alta rotación**: se vendió en 8 o más de las 13 semanas y se sigue vendiendo. Orden: más inflación acumulada primero.
+    - **Baja rotación**: menos semanas y se sigue vendiendo. Orden: lo que facturaron. Por inflación ganaban los vendidos una sola vez con un precio de 2023.
+    - **Sin ventas**: no sale hace más de 14 días y más de 3 veces su intervalo promedio entre ventas, o hace más de 45 días. Falta, cambió de código o no viene más: su precio viejo ya no se cobra. Orden: lo que facturaban.
+  - En alta y baja entran los que tienen **45 días o más sin cambio de precio**.
+  - **Detectar el reemplazo por el nombre** (un artículo nuevo con nombre parecido que empezó a venderse cerca de la última venta del viejo): probado con los 16 de alta rotación que dejaron de salir, **ninguno tenía un reemplazo así**. En esta base se ven faltantes y cambios de marca (Azúcar Marolio → Azumen / Ledesma), no códigos nuevos con el mismo nombre. No se implementó.
 - [x] **Inflación de la góndola**: canasta de los 100 artículos que más facturaron en los últimos 12 meses. Por mes se toma la mediana del precio de cada artículo, se compara con el mes base (hace 12 meses) y se pondera por lo que facturó cada uno. Se compara con el IPC de alimentos acumulado en los mismos meses. Gráfico: dos líneas, una sola escala (% acumulado desde el mes base).
 - [x] Front: sección **Góndola** (`src/pages/GondolaPage.jsx`), con su ícono y su lugar en la navegación.
 - [x] Verificación con la copia del 15/10 (ver "Verificación de las Fases 12 a 17").
@@ -691,7 +697,7 @@ Qué tendría que cambiar para retomarla:
 
 Hecha el 2026-10-16 con la copia del 15/10 a las 20:34 (`.script` + `.log`). Con la foto completa, cada cálculo tarda menos de 250 ms en Node.
 
-- [x] **Precios (12)**: de los 150 artículos, 100 tienen el mismo precio hace 45 días o más y 50 cambiaron. Arriba de todo: Arvejas Molto, $700 desde el 19/04/2024 (+103% de inflación desde entonces); Manteca SyS x100, $1.600 desde el 08/07/2024 (+82%); Tostadas de arroz Leiva, $1.400 desde el 25/10/2024 (+70%).
+- [x] **Precios (12)**, con los grupos por rotación: **212 de alta rotación** con precio viejo (104 se actualizaron en los últimos 45 días), 723 de baja rotación y 515 sin ventas (arriba: Aceite Cocinero 900 ml, Kinder Sorpresa, Pepsi 2,25 retornable). En alta rotación, arriba de todo: Arroz Tío Carlos 1 kg y Arroz Luchetti 500 g, con el mismo precio desde febrero de 2024 (+138%). Con la versión anterior (top 150): Arvejas Molto, $700 desde el 19/04/2024 (+103% de inflación desde entonces); Manteca SyS x100, $1.600 desde el 08/07/2024 (+82%); Tostadas de arroz Leiva, $1.400 desde el 25/10/2024 (+70%).
 - [x] **Inflación propia (12)**: septiembre de 2025 a septiembre de 2026, con 100 artículos: **tus precios +28,2%, IPC de alimentos +35,2%**.
 - [x] **Faltantes (13)**: con fecha 15/10 aparecen Papel Higienol x4 (se vendía la mitad de los días, sin ventas desde el 30/09) y Azúcar Marolio 1 kg (desde el 01/10). Con fecha 16/10 se suma Azúcar Azumen 1 kg.
 - [x] **Mapa de calor (14)**: del 21/08 al 15/10, de 9 a 22 h. Pico: domingo de 12 a 13 h (23 compras promedio). Se ve el corte de la siesta (15 a 17 h) y que el domingo a la tarde está cerrado.
