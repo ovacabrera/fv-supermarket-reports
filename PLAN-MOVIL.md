@@ -22,7 +22,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - 🟡 **Fase 7 (leer también el `.log`)**: hecha en el repo y publicada el 2026-10-15 con las ventas del día incluidas. El 2026-10-16 se confirmó en la PC del POS que Node lee `fvposdb.log` con el POS abierto. Falta la verificación contra el checkpoint del día siguiente.
 - 🟡 **IPC (Fase 9)**: hecha en el repo el 2026-10-15. Cada publicación baja del CSV oficial del INDEC el rubro **Alimentos y bebidas no alcohólicas** (nacional) y lo mete en la foto. Publicada el 2026-10-15. Falta ver en noviembre que tome sola el dato de octubre.
 - ✅ **Reportes nuevos (Fases 12 a 17)**: publicados en producción el 2026-10-16. Hay una sección nueva, **Góndola**, con precios sin actualizar, inflación propia y faltantes probables. Además: comparación con otros períodos en Ventas, Pareto y pares en Productos, y mapa de calor en Histórico. La **Fase 18** (caja y anulaciones) se descartó: no hay datos.
-- 🟡 **Consultor de precios (Fase 19)**: hecho el 2026-10-16. Sección **Precios**: buscar por nombre o código y escanear con la cámara. Falta que la PC del POS haga `git pull` + `npm ci` y publique, y probar el escaneo en iPhone y Android.
+- 🟡 **Consultor de precios (Fase 19)**: front en producción el 2026-10-16. Sección **Precios**: buscar por nombre o código y escanear con la cámara. Falta que la PC del POS haga `git pull` + `npm ci` y publique, y probar el escaneo en iPhone y Android.
 - ⬜ Después: **Fase 5** (PWA, con la identidad visual nueva).
 - ⬜ **Fase 10 (conectores)**: que los reportes anden con otros sistemas de punto de venta. Se elige la fuente al instalar (`FUENTE=facilvirtual-v1`, …) y cada conector arma la misma foto.
 
@@ -700,7 +700,7 @@ Qué tendría que cambiar para retomarla:
 - [ ] Confirmar cómo deja el POS en el `.log` una venta anulada después de cobrada (ver "Pendientes de datos": anular una venta de prueba).
 - [ ] Con 2 o 3 semanas de cierres diarios, rehacer el diseño: por cierre, efectivo esperado (caja inicial + ventas en efectivo + cobros − retiros) contra lo retirado. Resolver antes las 818 ventas con pagos mixtos donde la caja no coincide con el total.
 
-## Fase 19: consultor de precios 🟡 (hecho el 2026-10-16; falta publicar los datos desde la PC del POS)
+## Fase 19: consultor de precios 🟡 (front en producción el 2026-10-16; falta publicar los datos desde la PC del POS)
 
 Se consulta el precio de un artículo desde el celular: escaneando el código de barras o escribiendo parte del nombre.
 
