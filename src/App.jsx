@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { parseHSQL } from "./lib/parseHSQL.js";
 import { readCachedSnapshot, fetchMeta, fetchSnapshot, fetchLiveSnapshot, snapshotDate } from "./lib/loadSnapshot.js";
 import { filterOrders, computeMetrics, lastSaleDate, paymentRanking } from "./lib/metrics.js";
-import { addDays, toYMD } from "./lib/dates.js";
+import { toYMD } from "./lib/dates.js";
 import { SECTIONS } from "./lib/sections.js";
 import { describeDates } from "./lib/period.js";
 import { Sidebar, BottomNav, Brand } from "./components/Nav.jsx";
@@ -96,8 +96,7 @@ export default function App() {
   const fileRef = useRef(null);
 
   const today = toYMD(new Date());
-  const ayer = addDays(today, -1);
-  const [period, setPeriod] = useState({ dateFrom: ayer, dateTo: ayer, timeFrom: "00:00", timeTo: "23:59" });
+  const [period, setPeriod] = useState({ dateFrom: today, dateTo: today, timeFrom: "00:00", timeTo: "23:59" });
 
   const changeTab = useCallback(id => {
     setTab(id);
