@@ -41,7 +41,11 @@ function fail(msg) {
 }
 
 // Corre un comando, copia su salida al log y falla si termina mal.
+// Con shell (Windows) los argumentos se unen sin comillas: los que tienen espacios hay que citarlos.
+const quote = a => (process.platform === "win32" && /[\s"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a);
+
 function run(cmd, args, env) {
+  args = args.map(quote);
   log(`$ ${cmd} ${args.join(" ")}`);
   const r = spawnSync(cmd, args, {
     cwd: ROOT,
