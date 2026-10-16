@@ -16,6 +16,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - ✅ **Rediseño publicado (Fase 8)**: reportes nuevos, pensados para el celular, probados en iPhone y Android el 2026-10-14.
 - ✅ **En producción desde la PC del POS** (2026-10-16): instalada (P3) y publicando sola con el Programador de tareas a las **10, 14, 19 y 22 h** (P5). Probado con "Ejecutar" desde el Programador.
 - ✅ **Usuarios con acceso** (P6, 2026-10-16) y **actualización automática verificada**: la ejecución de las 14:00 actualizó los datos sola.
+- 🟡 **Front y datos separados (Fase 11)**: hecho en el repo el 2026-10-16. La PC del POS sube solo los datos a Workers KV y el front se publica aparte desde la Mac (`npm run deploy:front`). Probado en preview; falta el pase a producción (ver la Fase 11).
 - ⬜ Falta corregir los datos que distorsionan los reportes (P7, con los ajustes del cliente de la Fase 10).
 - ⬜ **Repo de GitHub público**: por ahora se deja así, a propósito (ver P1).
 - 🟡 **Fase 7 (leer también el `.log`)**: hecha en el repo y publicada el 2026-10-15 con las ventas del día incluidas. El 2026-10-16 se confirmó en la PC del POS que Node lee `fvposdb.log` con el POS abierto. Falta la verificación contra el checkpoint del día siguiente.
@@ -41,7 +42,7 @@ Los pasos van en orden. Los marcados 🧑 los hace el usuario (necesitan la cuen
 En la PC del POS no conviene `wrangler login` (sesión personal que vence). Se usa un token limitado:
 
 - [ ] dash.cloudflare.com → My Profile → **API Tokens** → Create Token → *Create Custom Token*.
-  - Permisos: **Account → Cloudflare Pages → Edit**. Nada más.
+  - Permisos: **Account → Cloudflare Pages → Edit** y, desde la Fase 11, **Account → Workers KV Storage → Edit**. Nada más.
   - Account Resources: solo esta cuenta.
   - Opcional: sin vencimiento, o con vencimiento anual y anotar la fecha para renovarlo.
 - [ ] Anotar también el **Account ID** (Workers & Pages → columna derecha).
@@ -108,7 +109,8 @@ Ver "Pendientes de datos y bugs conocidos". Recomendado antes de que otros usen 
 
 ### P8. Mantenimiento
 
-- **Actualizar el código** en la PC del POS después de un cambio: `git pull`, `npm ci` (si cambió `package-lock.json`) y `scripts\publish-task.cmd --build`. Sin `--build` se sigue publicando el front viejo con datos nuevos.
+- **Publicar una versión nueva del front** (desde la Fase 11): desde la Mac, `npm run deploy:front`. Para probar antes: `npm run deploy:front -- --preview` y abrir `https://preview.panel-ventas-fv.pages.dev` (lee los datos reales). No hace falta tocar la PC del POS.
+- **Actualizar el código en la PC del POS**: solo si cambió algo de la publicación de datos (parser, snapshot, scripts): `git pull` y `npm ci` (si cambió `package-lock.json`).
 - **Si deja de actualizar**: el celular muestra "Datos al …" en rojo después de 36 h. Revisar `logs\publish.log` en la PC del POS.
 - **Token**: si vence o se revoca, el log muestra un error de autenticación de wrangler. Crear uno nuevo (P2) y actualizar `.env`.
 - **Usuarios**: ver "Gestión de usuarios" en la Fase 3.
@@ -386,7 +388,7 @@ Objetivo: que los reportes se vean profesionales, se lean bien en el celular (us
 
 ### Orden sugerido
 
-P7 (datos) → Fase 7 (`.log`) → Fase 8 (rediseño) → Fase 9 (IPC automático) → Fase 5 (PWA, con la identidad nueva) → Fase 10 (conectores; si aparece antes otro sistema, se adelanta). La Fase 8 conviene después de la 7 porque el cálculo de "Datos al …" y las fuentes de datos cambian.
+P7 (datos) → Fase 7 (`.log`) → Fase 8 (rediseño) → Fase 9 (IPC automático) → Fase 5 (PWA, con la identidad nueva) → Fase 11 (front y datos separados, hecha antes por urgencia) → Fase 10 (conectores; si aparece antes otro sistema, se adelanta). La Fase 8 conviene después de la 7 porque el cálculo de "Datos al …" y las fuentes de datos cambian.
 
 ---
 
@@ -540,12 +542,53 @@ buildSnapshot({ conector, raw, ajustes, ipc }, info) → { snap, info }
 - [ ] **7. Plantilla y guía "Cómo agregar una fuente"** (en este plan o en el README): pasos, qué datos de muestra conseguir y cómo probarlo.
   - Prueba común para todo conector: con sus datos de muestra, `parse` → `validateDb` sin errores, y `encodeSnapshot` → `decodeSnapshot` sin pérdida.
 - [ ] **8. Primer conector nuevo**, cuando haya un sistema real: conseguir una copia de su base (o un export) y la documentación de su estructura, y armar el conector con esa muestra.
-- [ ] 🧑 Después de publicar los pasos 2 a 6: `git pull` en la PC del POS, copiar ahí `config\ajustes.jsonc`, correr `node scripts\publish.mjs --dry-run` (revisar el informe de ajustes) y después `scripts\publish-task.cmd --build`. Comprobar que "Datos al …" y los reportes sigan iguales, salvo lo corregido.
+- [ ] 🧑 Después de publicar los pasos 2 a 6: `git pull` en la PC del POS, copiar ahí `config\ajustes.jsonc`, correr `node scripts\publish.mjs --dry-run` (revisar el informe de ajustes) y después `scripts\publish-task.cmd`. Comprobar que "Datos al …" y los reportes sigan iguales, salvo lo corregido.
 
 ### Fuera de esta fase (anotado para después)
 
 - Nombres atados a FácilVirtual en el proyecto: repo `fv-supermarket-reports`, proyecto de Pages `panel-ventas-fv`.
 - Varias instalaciones o negocios: cada uno con su PC, su `.env`, su proyecto de Pages y su grupo de Access. Esta fase no cubre un panel con varios negocios a la vez.
+
+## Fase 11: front y datos separados (Workers KV) 🟡 (hecha en el repo; falta el pase a producción)
+
+Problema: Cloudflare Pages reemplaza el sitio entero en cada deploy, así que los datos tenían que ir en el mismo paquete que el front. Una versión nueva del front solo podía salir de la PC del POS (la única con la base actual); desde otra máquina se publicaban datos viejos. Además, cada actualización de datos contaba como deploy.
+
+```text
+PC del POS ── npm run publish ──► Workers KV "panel-ventas-fv-datos" (meta.json, snapshot.json.gz)
+                                                  │
+Mac ── npm run deploy:front ──► Pages + functions/data/[[path]].js ──► /data/* ──► celular
+```
+
+### Hecho (2026-10-16)
+
+- [x] KV **`panel-ventas-fv-datos`** creado en la cuenta (id en `wrangler.json`, no es secreto).
+- [x] **`wrangler.json`**: configuración del proyecto de Pages con el binding `DATOS` al KV. Con este archivo, cada `wrangler pages deploy` sube también `functions/` y el binding (el binding queda definido por el archivo, no por el panel).
+- [x] **`functions/data/[[path]].js`**: sirve `meta.json` y `snapshot.json.gz` desde el KV, en las mismas URLs de antes. **El front no cambió.** Cualquier otra ruta de `/data/` da 404; sin datos, 404 "Todavía no hay datos publicados". Las cabeceras van en la función (`_headers` no se aplica a las Functions). Sigue detrás de Access porque está en el mismo dominio.
+- [x] **`scripts/publish.mjs`** (PC del POS): chequeo de Access → foto en `snapshot/` → `wrangler kv key put` de `snapshot.json.gz` y **después** `meta.json` (el front mira `meta.json`; así nunca ve uno que apunte a una foto que todavía no subió). Ya no arma ni publica el front; `--build` se ignora con un aviso. El Programador de tareas no cambia.
+- [x] **`scripts/deploy-front.mjs`** (`npm run deploy:front [-- --preview]`): chequeo de Access → `vite build` → borra `dist/data` → `wrangler pages deploy` → comprueba que la URL del deploy esté protegida. `--preview` publica en `preview.panel-ventas-fv.pages.dev` sin tocar producción.
+- [x] Lo común de los dos scripts en `scripts/lib/cloudflare.mjs`.
+- [x] Verificado:
+  - Subida al KV de la copia del 15/10 desde la Mac y bajada: el `.gz` vuelve idéntico (mismo SHA-1).
+  - Función en local (`wrangler pages dev` con KV local): `meta.json` 200 como JSON, la foto idéntica, otra ruta 404.
+  - Deploy en **preview** con la función: la API de Cloudflare muestra el binding `DATOS` en preview. Producción todavía no lo tiene (lo toma con su primer `deploy:front`).
+
+### Pase a producción (en este orden)
+
+Hasta el paso 3, producción sigue con el último deploy de la PC del POS (front + datos en el paquete), sin cortes.
+
+- [ ] 🧑 **0. Probar preview en el celular**: abrir `https://preview.panel-ventas-fv.pages.dev` (pide el código de Access de nuevo, es otro subdominio). Tiene que mostrar los reportes con "Datos al 15/10 20:34" (la foto de prueba que subió la Mac al KV).
+- [ ] 🧑 **1. Token de la PC del POS**: dash.cloudflare.com → My Profile → API Tokens → el token de la PC del POS → *Edit* → agregar **Account → Workers KV Storage → Edit** → guardar. El valor del token no cambia, el `.env` queda igual. (Si Cloudflare obliga a crear uno nuevo, reemplazarlo en el `.env`.)
+- [ ] 🧑 **2. PC del POS**: `git pull` y después `scripts\publish-task.cmd`. En `logs\publish.log` tiene que terminar con `✓ Datos publicados`. Esto pisa en el KV la foto de prueba con la del día.
+  - Si falla con un error de autenticación en `wrangler kv key put`, falta el permiso del paso 1.
+- [ ] **3. Front a producción**: `npm run deploy:front`, desde la Mac o desde la PC del POS. Recién acá producción empieza a leer del KV.
+- [ ] 🧑 **4. Comprobar en el celular**: ↻ Actualizar en `https://panel-ventas-fv.pages.dev` → "Datos al …" con la hora de la publicación del paso 2, y "Este mes" con "1 oct – 16 oct".
+- [ ] 🧑 **5. Esperar una publicación programada** (10, 14, 19 o 22 h) y confirmar que "Datos al …" se actualiza solo.
+
+### Notas
+
+- Workers KV, plan gratis: hasta 25 MiB por valor (la foto pesa ~4,3 MB), 1.000 escrituras y 100.000 lecturas por día (usamos ~8 escrituras). Una foto nueva puede tardar hasta ~1 minuto en verse en todos lados.
+- Se descartó R2 porque activarlo puede pedir una tarjeta aunque no se cobre.
+- Fase 10: con varios clientes, cada instalación necesita su propio proyecto de Pages y su KV. `wrangler.json` tiene el de este cliente; habrá que sacarlo a la configuración de la instalación.
 
 ## Pendientes de datos y bugs conocidos
 

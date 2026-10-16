@@ -1,0 +1,8 @@
+{
+  "name": "panel-ventas-fv",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-10-01",
+  "kv_namespaces": [
+    { "binding": "DATOS", "id": "b007b7b32e674d4b8d6f6ca7da29fd4e" }
+  ]
+}

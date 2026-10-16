@@ -1,10 +1,9 @@
 # Cloudflare Pages: cabeceras HTTP (Vite copia este archivo a dist/).
 
-# Los datos y el index cambian en cada publicación: el navegador siempre revalida.
-/data/*
-  Cache-Control: no-cache
-  X-Robots-Tag: noindex
+# /data/* lo sirve functions/data/[[path]].js desde el KV, con sus propias cabeceras
+# (_headers no se aplica a las Functions).
 
+# El index cambia en cada publicación del front: el navegador siempre revalida.
 /
   Cache-Control: no-cache
 

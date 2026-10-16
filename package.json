@@ -32,7 +32,8 @@
     "preview": "vite preview",
     "electron": "electron .",
     "dist": "electron-builder --win portable",
-    "publish": "node scripts/publish.mjs"
+    "publish": "node scripts/publish.mjs",
+    "deploy:front": "node scripts/deploy-front.mjs"
   },
   "dependencies": {
     "express": "^4.18.2",
