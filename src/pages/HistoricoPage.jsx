@@ -3,7 +3,7 @@ import { Panel, Stats, Delta } from "../components/ui.jsx";
 import { AnnualBars, IpcBars } from "../components/charts.jsx";
 import { computeAnual, computeHistorico } from "../lib/metrics.js";
 import { MESES_NOMBRE } from "../lib/dates.js";
-import { ultimoIpc, IPC_FUENTE } from "../lib/ipc.js";
+import { ultimoIpc, ipcDe, IPC_FUENTE } from "../lib/ipc.js";
 import { ars, arsShort, num, pct } from "../lib/format.js";
 
 export default function HistoricoPage({ db }) {
@@ -13,7 +13,7 @@ export default function HistoricoPage({ db }) {
   const [year, setYear] = useState(hoyYear);
   const esActual = year === hoyYear;
   const anual = useMemo(() => computeAnual(db, year, esActual), [db, year, esActual]);
-  const ipc = ultimoIpc();
+  const ipc = ultimoIpc(ipcDe(db));
 
   return (
     <>

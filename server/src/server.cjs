@@ -14,6 +14,9 @@ const DB_PATH = process.env.FV_DB_PATH || (process.platform === "win32"
   ? "C:\\FacilVirtual\\data\\fvposdb.script"
   : path.join(os.homedir(), "Downloads", "fvposdb.script"));
 
+// Última copia buena del IPC del INDEC (dentro de Electron, la carpeta de la app puede ser de solo lectura).
+const IPC_CACHE = process.env.FV_IPC_CACHE || path.join(os.homedir(), ".fv-panel", "ipc.json");
+
 // Parser, snapshot y lectura de la base son ESM (los mismos que usa scripts/export-snapshot.mjs).
 const esm = file => import(pathToFileURL(path.join(__dirname, file)).href);
  
@@ -58,11 +61,18 @@ app.get("/api/snapshot", async (req, res) => {
     if (!fs.existsSync(DB_PATH)) {
       return res.status(404).json({ error: "Archivo no encontrado", path: DB_PATH });
     }
-    const [{ readPosDb }, { parseHSQL }, { encodeSnapshot }] = await Promise.all([
-      esm("readPosDb.mjs"), esm("../../src/lib/parseHSQL.js"), esm("../../src/lib/snapshot.js"),
+    const [{ readPosDb }, { parseHSQL }, { encodeSnapshot }, { obtenerIpc }] = await Promise.all([
+      esm("readPosDb.mjs"), esm("../../src/lib/parseHSQL.js"), esm("../../src/lib/snapshot.js"), esm("fetchIpc.mjs"),
     ]);
     const { script, log, source } = readPosDb(DB_PATH);
-    const gz = zlib.gzipSync(JSON.stringify(encodeSnapshot(parseHSQL({ script, log }), source)));
+    const db = parseHSQL({ script, log });
+    // IPC: se revisa en el INDEC como mucho cada 6 h (sin internet, la copia guardada o el valor del código).
+    const ipc = await obtenerIpc({ cachePath: IPC_CACHE, timeoutMs: 5000, maxAgeMs: 6 * 3600_000 });
+    ipc.avisos.forEach(w => console.warn(`⚠ ${w}`));
+    db.ipc = ipc.ipc;
+    const snap = encodeSnapshot(db, source);
+    snap.ipc = ipc.meta;
+    const gz = zlib.gzipSync(JSON.stringify(snap));
     res.setHeader("Content-Type", "application/gzip");
     res.send(gz);
   } catch (e) {

@@ -100,6 +100,6 @@ export function decodeSnapshot(snap) {
   if (snap.version !== SNAPSHOT_VERSION) throw new Error(`Versión de snapshot no soportada: ${snap.version}`);
   const db = { ...snap.maps };
   for (const [name, table] of Object.entries(snap.tables)) db[name] = decodeTable(table);
-  const { generatedAt, source, counts } = snap;
-  return { db, meta: { version: snap.version, generatedAt, source, counts } };
+  const { generatedAt, source, counts, ipc } = snap;
+  return { db, meta: { version: snap.version, generatedAt, source, counts, ipc } };
 }

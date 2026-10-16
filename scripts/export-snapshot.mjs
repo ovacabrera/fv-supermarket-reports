@@ -1,8 +1,12 @@
 // Genera el snapshot pre-procesado de la base del POS.
 //
-//   node scripts/export-snapshot.mjs [--db <ruta .script>] [--out <carpeta>] [--no-log]
+//   node scripts/export-snapshot.mjs [--db <ruta .script>] [--out <carpeta>] [--no-log] [--no-ipc]
 //
 // Lee también <ruta>.log, si está al lado (las ventas desde el último checkpoint). --no-log lo ignora.
+//
+// Agrega el IPC del INDEC (ver server/src/fetchIpc.mjs): la última copia buena queda en
+// snapshot/ipc.json. Si no se puede bajar, usa esa copia; nunca hace fallar la exportación.
+// --no-ipc no consulta al INDEC y usa la copia guardada (o el valor del código).
 //
 // Escribe en la carpeta de salida (por defecto ./snapshot):
 //   snapshot.json.gz  datos compactos (ver src/lib/snapshot.js)
@@ -16,6 +20,7 @@ import { fileURLToPath } from "url";
 import { parseHSQL } from "../src/lib/parseHSQL.js";
 import { encodeSnapshot } from "../src/lib/snapshot.js";
 import { readPosDb } from "../server/src/readPosDb.mjs";
+import { obtenerIpc } from "../server/src/fetchIpc.mjs";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -57,7 +62,14 @@ const t1 = Date.now();
 if (info.log) console.log(`  .log: ${info.log.statements} sentencias, ${info.log.commits} COMMIT, ${info.log.rollbacks} ROLLBACK, ${info.log.uncommitted} sin confirmar${info.log.partialLine ? ", última línea cortada" : ""}`);
 for (const w of info.warnings) console.warn(`  ⚠ ${w}`);
 
+const ipc = await obtenerIpc({ cachePath: path.join(ROOT, "snapshot", "ipc.json"), maxAgeMs: process.argv.includes("--no-ipc") ? Infinity : 0 });
+for (const w of ipc.avisos) console.warn(`  ⚠ ${w}`);
+console.log(`  IPC: ${ipc.meta.serie}, hasta ${ipc.meta.hasta} (${{ indec: "INDEC", copia: "copia guardada", codigo: "valor del código" }[ipc.meta.origen]})`);
+db.ipc = ipc.ipc;
+const tIpc = Date.now();
+
 const snap = encodeSnapshot(db, source);
+snap.ipc = ipc.meta;
 const json = JSON.stringify(snap);
 const gz = zlib.gzipSync(json, { level: 9 });
 const t2 = Date.now();
@@ -65,10 +77,10 @@ const t2 = Date.now();
 fs.mkdirSync(outDir, { recursive: true });
 writeAtomic(path.join(outDir, "snapshot.json.gz"), gz);
 
-const meta = { version: snap.version, generatedAt: snap.generatedAt, source: snap.source, counts: snap.counts, bytes: gz.length };
+const meta = { version: snap.version, generatedAt: snap.generatedAt, source: snap.source, counts: snap.counts, ipc: snap.ipc, bytes: gz.length };
 writeAtomic(path.join(outDir, "meta.json"), JSON.stringify(meta, null, 2));
 
 console.log(`✓ Snapshot generado en ${outDir}`);
 for (const [name, n] of Object.entries(snap.counts)) console.log(`    ${name.padEnd(16)} ${n.toLocaleString("es-AR")}`);
 console.log(`  JSON ${mb(json.length)} → gzip ${mb(gz.length)}`);
-console.log(`  parseo ${((t1 - t0) / 1000).toFixed(1)}s · codificación ${((t2 - t1) / 1000).toFixed(1)}s`);
+console.log(`  parseo ${((t1 - t0) / 1000).toFixed(1)}s · IPC ${((tIpc - t1) / 1000).toFixed(1)}s · codificación ${((t2 - tIpc) / 1000).toFixed(1)}s`);

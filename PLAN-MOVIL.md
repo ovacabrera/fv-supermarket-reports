@@ -17,7 +17,7 @@ Los datos salen de la última "foto" de la base del POS, ya procesada.
 - ⬜ **Falta la producción real**: que la **PC del POS** publique sola todos los días. Hoy los datos publicados son de una copia de la base del 15/10 a las 20:34, hecha a mano, y se ven en rojo como viejos cuando pasan más de 36 h.
 - ⬜ **Repo de GitHub público**: pasarlo a privado (ver P1).
 - 🟡 **Fase 7 (leer también el `.log`)**: hecha en el repo y publicada el 2026-10-15 con las ventas del día incluidas. Falta la verificación contra el checkpoint del día siguiente.
-- 🟡 **IPC**: desde el 2026-10-15 se usa el rubro **Alimentos y bebidas no alcohólicas** (nacional) del CSV oficial del INDEC, cargado a mano hasta septiembre de 2026. La **Fase 9** lo va a bajar solo en cada publicación.
+- 🟡 **IPC (Fase 9)**: hecha en el repo el 2026-10-15. Cada publicación baja del CSV oficial del INDEC el rubro **Alimentos y bebidas no alcohólicas** (nacional) y lo mete en la foto. Falta publicarla y ver en noviembre que tome sola el dato de octubre.
 - ⬜ Después: **Fase 5** (PWA, con la identidad visual nueva).
 
 ## Próximos pasos: puesta en producción
@@ -380,7 +380,7 @@ P7 (datos) → Fase 7 (`.log`) → Fase 8 (rediseño) → Fase 9 (IPC automátic
 
 ---
 
-## Fase 9: IPC del INDEC automático ⬜
+## Fase 9: IPC del INDEC automático 🟡 (hecha en el repo; falta publicarla y ver el dato de octubre)
 
 Objetivo: que el ajuste por inflación (Histórico IPC y comparaciones "ajustado por IPC") use siempre el último dato oficial, sin editar código. Hoy `src/lib/ipc.js` tiene la variación mensual escrita a mano.
 
@@ -399,16 +399,24 @@ Objetivo: que el ajuste por inflación (Histórico IPC y comparaciones "ajustado
 
 - [x] **Arreglo inmediato** (2026-10-15): `src/lib/ipc.js` pasó a la serie de alimentos y bebidas (2023 a septiembre de 2026), copiada del CSV del 13/10. Cambian los montos "ajustados por IPC" del Histórico, porque antes se usaba el nivel general.
 - [x] **Front**: el Histórico indica la fuente (`IPC_FUENTE` en `src/lib/ipc.js`) en "Últimos meses" y en el gráfico anual ("IPC del INDEC, rubro Alimentos y bebidas no alcohólicas (nacional), datos hasta …").
-- [ ] `src/lib/indec.js`: función pura `parseIpcCsv(text, { codigo = "01", region = "Nacional" })` → `{ [año]: [12 variaciones mensuales o null] }` (mismo formato que hoy `IPC`). Sin red ni `fs`, para poder probarla.
-- [ ] `scripts/fetch-ipc.mjs` (o adentro de `export-snapshot.mjs`): baja el CSV con timeout (~20 s), lo decodifica como latin1 y lo parsea.
-  - **Validación antes de usarlo**: meses consecutivos sin huecos, valores entre −5% y 30%, y que coincida con lo ya conocido (los datos viejos no deberían cambiar; si cambian, avisar en el log).
-  - Si falla la descarga o la validación: usar la última copia buena y seguir. **Publicar nunca falla por el IPC**; solo avisa en `publish.log`.
-- [ ] **Última copia buena**: guardarla en `snapshot/ipc.json` (fuera del repo) con la fecha de descarga y el `Last-Modified` del INDEC. Si no hay ninguna, usar el valor de `src/lib/ipc.js`.
-  - El INDEC publica una vez por mes (a mediados de mes): con un `HEAD` y el `Last-Modified` se evita bajar el archivo en cada publicación horaria.
-- [ ] **Snapshot**: agregar `ipc` a la foto (un mapa más, `encodeSnapshot` lo toma solo) y `meta.ipc = { hasta: "2026-09", descargado, serie: "Alimentos y bebidas no alcohólicas (nacional)" }`.
-- [ ] **Front**: `acumuladoFactor` y `ultimoIpc` usan `db.ipc` si viene en la foto, y si no, `IPC` de `src/lib/ipc.js`. La nota de fuente toma la serie y el último mes de `meta.ipc`.
-- [ ] **Server local / Electron**: `/api/snapshot` hace lo mismo (con internet, el dato nuevo; sin internet, la última copia guardada o el valor del código).
-- [ ] Verificación: `parseIpcCsv` sobre el CSV del 13/10 tiene que dar exactamente los valores de `src/lib/ipc.js` (2023 a septiembre de 2026). Probar también sin red (corta la descarga): la publicación termina bien y usa la copia guardada.
+- [x] `src/lib/indec.js`: funciones puras, sin red ni `fs`.
+  - `parseIpcCsv(text, { codigo = "01", region = "Nacional" })` → `{ [año]: [12 variaciones mensuales o null] }`, el mismo formato que `IPC`. Busca las columnas por nombre y recorta el `\r` de `Region`. Trae desde 2016.
+  - `validarIpc(ipc, conocido)` → `{ errores, avisos }`.
+- [x] `server/src/fetchIpc.mjs`: `obtenerIpc({ cachePath, timeoutMs, maxAgeMs })`, que usan `export-snapshot.mjs` y el server local. Baja el CSV con timeout de 20 s, lo decodifica como latin1 y lo parsea.
+  - **Validación antes de usarlo** (errores: no se usa): al menos 12 meses, consecutivos y sin huecos, valores entre −5% y 30%, y que no termine antes que lo ya conocido. Si cambian datos ya conocidos, solo avisa.
+  - Si falla la descarga o la validación, usa la última copia buena y sigue. **Publicar nunca falla por el IPC**: el aviso (`⚠ IPC: …`) queda en `publish.log`.
+- [x] **Última copia buena** en `snapshot/ipc.json` (fuera del repo), con la fecha de descarga, la de la última revisión y el `Last-Modified` del INDEC. Si no hay ninguna, se usa el valor de `src/lib/ipc.js`.
+  - Primero hace un `HEAD`: si el `Last-Modified` es el de la copia, no baja el archivo (~0,3 s por publicación).
+  - `export-snapshot --no-ipc` no consulta al INDEC y usa la copia guardada.
+- [x] **Snapshot**: `db.ipc` es un mapa más (`encodeSnapshot` lo toma solo, sin cambiar la versión). La foto y `meta.json` traen `ipc = { serie, hasta: "2026-09", origen: "indec" | "copia" | "codigo", descargado, lastModified }`. `publish.log` muestra "IPC hasta … (origen)".
+- [x] **Front**: `ipcDe(db)` devuelve `db.ipc` si viene en la foto y, si no, `IPC` de `src/lib/ipc.js` (selector manual, fotos viejas guardadas en el celular). Lo usan `computeHistorico`, `computeAnual` (con `acumuladoFactor`) y la nota de fuente del Histórico (`ultimoIpc`). El último mes sale de los datos mismos, no de `meta.ipc`.
+- [x] **Server local / Electron**: `/api/snapshot` hace lo mismo, con timeout de 5 s y consultando al INDEC como mucho cada 6 h. La copia va en `~/.fv-panel/ipc.json` (o `FV_IPC_CACHE`), porque dentro de Electron la carpeta de la app puede ser de solo lectura.
+- [x] Verificación (2026-10-15):
+  - `node scripts/test-ipc.mjs <csv>`: con el CSV del 13/10, da exactamente los valores de `src/lib/ipc.js` (2023 a septiembre de 2026).
+  - Casos armados (sin red, con `fetch` falso): sin red y sin copia usa el código; con red baja y guarda; con el mismo `Last-Modified` solo hace el `HEAD`; sin red usa la copia; un archivo que no valida no pisa la copia.
+  - `npm run snapshot` contra el INDEC real: "IPC … hasta 2026-09 (INDEC)". Con la foto decodificada, el Histórico da igual que con los valores del código. `/api/snapshot` del server local también trae el IPC.
+- [ ] Publicar (`npm run publish -- --build`) y comprobar en el celular que el Histórico siga igual.
+- [ ] A mediados de noviembre: ver en `publish.log` que haya tomado solo el dato de octubre ("IPC hasta 2026-10").
 
 ## Pendientes de datos y bugs conocidos
 
@@ -430,6 +438,7 @@ Objetivo: que el ajuste por inflación (Histórico IPC y comparaciones "ajustado
 ```bash
 npm run snapshot        # debe terminar con "✓ Snapshot generado" y mostrar las cantidades
 node scripts/test-parse-log.mjs   # casos del .log armados a mano
+node scripts/test-ipc.mjs         # IPC del INDEC (con la ruta a un CSV real, compara con src/lib/ipc.js)
 npm run build
 npx eslint src/lib scripts
 ```

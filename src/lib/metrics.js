@@ -3,7 +3,7 @@
 // y devuelven los datos que muestran las páginas.
 
 import { DIAS_CORTO, DIAS_LARGO, MESES_CORTO, toYMD, fromYMD } from "./dates.js";
-import { IPC, acumuladoFactor } from "./ipc.js";
+import { ipcDe, acumuladoFactor } from "./ipc.js";
 
 // Producto genérico que usa la fiambrería para cobrar por ticket: se muestra como rubro propio
 // y no cuenta como "artículo" en los rankings.
@@ -165,7 +165,7 @@ export function computeHistorico(db, now = new Date()) {
     let picoInfo = null;
     if (picoKey) { const dt = fromYMD(picoKey); picoInfo = { dia: dt.getDate(), diaSemana: DIAS_LARGO[dt.getDay()], total: Math.round(picoVal) }; }
     const nombreMes = ref.toLocaleString("es-AR", { month: "long", year: "numeric" });
-    const ipcMes = (IPC[ref.getFullYear()] || [])[ref.getMonth()] ?? null;
+    const ipcMes = (ipcDe(db)[ref.getFullYear()] || [])[ref.getMonth()] ?? null;
     return { nombre: nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1), total: Math.round(total), cantOps, ticketProm: Math.round(ticketProm), unidades, pico: picoInfo, ipc: ipcMes, ref };
   });
   return meses.slice(0, 3).map((m, i) => {
@@ -246,8 +246,9 @@ export function computeAnual(db, year, esActual, hoy = new Date()) {
     unidades += unidadesMes[m];
   }
 
-  const ipcAnio = IPC[year] || Array(12).fill(null);
-  const factorAnioActual = esActual ? acumuladoFactor(year, 0, hoyMes) : 1;
+  const ipc = ipcDe(db);
+  const ipcAnio = ipc[year] || Array(12).fill(null);
+  const factorAnioActual = esActual ? acumuladoFactor(year, 0, hoyMes, ipc) : 1;
   const data = MESES_CORTO.map((mes, m) => {
     const esFuturo = year === hoyYear && m > hoyMes;
     const row = { mes, ventas: esFuturo ? null : Math.round(ventasMes[m]), ipc: ipcAnio[m] ?? null };

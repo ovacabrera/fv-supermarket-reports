@@ -97,7 +97,7 @@ fs.copyFileSync(path.join(ROOT, "public", "_headers"), path.join(DIST, "_headers
 const db = arg("db", process.env.FV_DB_PATH);
 run("node", ["scripts/export-snapshot.mjs", "--out", "dist/data", ...(db ? ["--db", db] : [])]);
 const meta = JSON.parse(fs.readFileSync(path.join(DIST, "data", "meta.json"), "utf8"));
-log(`Snapshot: base modificada ${meta.source.modified} · ${(meta.bytes / 1e6).toFixed(1)} MB`);
+log(`Snapshot: base modificada ${meta.source.modified} · ${(meta.bytes / 1e6).toFixed(1)} MB · IPC hasta ${meta.ipc?.hasta ?? "?"} (${meta.ipc?.origen ?? "?"})`);
 
 // 4. Deploy.
 if (dryRun) {
