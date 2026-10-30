@@ -61,9 +61,9 @@ Que los clientes escaneen un artículo en el súper con su celular y vean el pre
 
 ### Fase 5 — En producción y en el local
 
-- [ ] 🧑 Commit y `git push`, y `git pull` en la PC del POS (`C:\fv-reportes`). Hasta entonces la lista pública
-  **no se actualiza sola**: la tarea programada no hace `git pull` y sigue con el `publish.mjs` viejo.
-- [ ] Ver en `logs/publish.log` de la PC del POS la línea "✓ Lista de precios publicada" después de la próxima ejecución.
+- [x] Commit `61e34c7`, push y `git pull` en la PC del POS (2026-10-30).
+- [x] Primera publicación desde la PC del POS el 2026-10-30 a las 11:22: la lista pública se actualizó sola
+  (9.489 artículos). El KV tardó ~3 minutos en mostrarla.
 - [ ] 🧑 Probar en iPhone y Android con la wifi y los datos móviles del súper (escaneo real con la cámara).
 - [x] Cartel A4 con QR a https://precios-fv.pages.dev/: `docs/cartel-precios.pdf` (2026-10-30). El QR se verificó
   con zxing. Si se cambia la URL (dominio propio), hay que rehacerlo.
