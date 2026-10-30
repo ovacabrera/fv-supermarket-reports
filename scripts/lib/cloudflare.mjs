@@ -30,11 +30,11 @@ export function fail(msg) {
 // Con shell (Windows) los argumentos se unen sin comillas: los que tienen espacios hay que citarlos.
 const quote = a => (process.platform === "win32" && /[\s"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a);
 
-export function run(cmd, args, env) {
+export function run(cmd, args, env, cwd = ROOT) {
   args = args.map(quote);
   log(`$ ${cmd} ${args.join(" ")}`);
   const r = spawnSync(cmd, args, {
-    cwd: ROOT,
+    cwd,
     env: { ...process.env, ...env },
     encoding: "utf8",
     shell: process.platform === "win32", // npx es npx.cmd en Windows
@@ -60,6 +60,18 @@ export function config() {
   if (!project) fail("Falta el proyecto de Pages (CF_PAGES_PROJECT o name en wrangler.json)");
   if (!kvId) fail("Falta el KV de los datos (binding DATOS en wrangler.json)");
   return { project, kvId, prodUrl: `https://${project}.pages.dev/` };
+}
+
+// KV de la lista de precios pública, desde sites/precios/wrangler.json (binding PRECIOS).
+// null si el sitio público todavía no está armado.
+export function configPrecios() {
+  const file = path.join(ROOT, "sites", "precios", "wrangler.json");
+  if (!fs.existsSync(file)) return null;
+  const w = JSON.parse(fs.readFileSync(file, "utf8"));
+  const kvId = w.kv_namespaces?.find(k => k.binding === "PRECIOS")?.id;
+  if (!kvId) fail(`Falta el KV de la lista de precios (binding PRECIOS en ${path.relative(ROOT, file)})`);
+  if (kvId === config().kvId) fail("El KV de la lista de precios es el mismo que el de la foto: tiene que ser otro");
+  return { kvId, url: `https://${w.name}.pages.dev/` };
 }
 
 // ¿La URL está detrás de Cloudflare Access? Access responde con un redirect a

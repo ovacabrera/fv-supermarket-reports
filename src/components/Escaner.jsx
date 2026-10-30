@@ -23,7 +23,7 @@ async function crearDetector() {
 }
 
 function mensajeDeError(e) {
-  if (!navigator.mediaDevices?.getUserMedia) return "La cámara solo anda con la dirección https del panel, no en la red local.";
+  if (!navigator.mediaDevices?.getUserMedia) return "La cámara solo anda con la dirección https, no en la red local.";
   if (e?.name === "NotAllowedError") return "No hay permiso para usar la cámara. Habilitalo en los ajustes del navegador para este sitio.";
   if (e?.name === "NotFoundError" || e?.name === "OverconstrainedError") return "No se encontró una cámara en este equipo.";
   if (e?.name === "NotReadableError") return "La cámara la está usando otra aplicación.";

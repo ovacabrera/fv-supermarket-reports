@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "precios",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--config", "vite.precios.config.js", "--port", "5180", "--strictPort"],
+      "port": 5180
+    }
+  ]
+}

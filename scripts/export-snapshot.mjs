@@ -11,6 +11,7 @@
 // Escribe en la carpeta de salida (por defecto ./snapshot):
 //   snapshot.json.gz  datos compactos (ver src/lib/snapshot.js)
 //   meta.json         fecha de la foto, origen y cantidades (liviano, para chequear si hay datos nuevos)
+//   precios.json.gz   lista de precios para el consultor público (ver src/lib/preciosPublicos.js)
 
 import fs from "fs";
 import path from "path";
@@ -19,6 +20,7 @@ import zlib from "zlib";
 import { fileURLToPath } from "url";
 import { parseHSQL } from "../src/lib/parseHSQL.js";
 import { encodeSnapshot } from "../src/lib/snapshot.js";
+import { armarPreciosPublicos, validarPreciosPublicos } from "../src/lib/preciosPublicos.js";
 import { readPosDb } from "../server/src/readPosDb.mjs";
 import { obtenerIpc } from "../server/src/fetchIpc.mjs";
 
@@ -79,6 +81,19 @@ writeAtomic(path.join(outDir, "snapshot.json.gz"), gz);
 
 const meta = { version: snap.version, generatedAt: snap.generatedAt, source: snap.source, counts: snap.counts, ipc: snap.ipc, bytes: gz.length };
 writeAtomic(path.join(outDir, "meta.json"), JSON.stringify(meta, null, 2));
+
+// Lista de precios pública: si no pasa la validación no se escribe, y publish.mjs no sube nada viejo.
+const precios = JSON.stringify(armarPreciosPublicos(db, snap.generatedAt));
+const errores = validarPreciosPublicos(precios);
+const preciosFile = path.join(outDir, "precios.json.gz");
+if (errores.length) {
+  fs.rmSync(preciosFile, { force: true });
+  console.warn(`  ⚠ Lista de precios pública no generada: ${errores.join("; ")}`);
+} else {
+  const preciosGz = zlib.gzipSync(precios, { level: 9 });
+  writeAtomic(preciosFile, preciosGz);
+  console.log(`  precios.json: ${JSON.parse(precios).items.length.toLocaleString("es-AR")} artículos, gzip ${(preciosGz.length / 1024).toFixed(0)} KB`);
+}
 
 console.log(`✓ Snapshot generado en ${outDir}`);
 for (const [name, n] of Object.entries(snap.counts)) console.log(`    ${name.padEnd(16)} ${n.toLocaleString("es-AR")}`);

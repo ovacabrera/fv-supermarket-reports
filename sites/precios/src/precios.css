@@ -1,0 +1,44 @@
+/* ─── Consultor de precios público ────────────────────────────────────────────
+   Usa el sistema de diseño del panel (src/index.css): la etiqueta de góndola amarilla
+   es el precio. Una sola columna, pensada para el celular en la mano dentro del súper. */
+
+.pp {
+  max-width: 560px; margin: 0 auto;
+  padding: 0 var(--gutter) calc(var(--safe-b) + 32px);
+  display: grid; gap: 16px; align-content: start;
+}
+
+.pp-head { display: flex; align-items: center; gap: 10px; padding: 18px 0 2px; }
+.pp-head__mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: var(--tag); color: var(--tag-ink); flex: none; }
+.pp-head__title { font: 700 28px/1 var(--cond); letter-spacing: 0.005em; }
+
+.pp-intro__text { font-size: 18px; color: var(--ink-2); max-width: 32ch; }
+
+/* El botón de escanear es la acción principal: grande y al alcance del pulgar. */
+.pp-scan {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  min-height: 72px; padding: 0 20px; border: 0; border-radius: var(--r-lg);
+  background: var(--ink); color: var(--page);
+  font: 700 24px/1 var(--cond); letter-spacing: 0.01em;
+}
+.pp-scan:active { transform: scale(0.99); }
+
+.pp-ficha .pp-ficha__name { font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
+.pp-ficha .tag__value { font-size: clamp(56px, 24cqi, 120px); }
+
+.pp-empty { padding: 8px 12px; }
+
+/* Foto del producto (Open Food Facts), debajo del buscador. Toma su propio tamaño (sin recortar ni
+   rellenar): son fotos de celular de proporciones variadas y un recuadro fijo dejaba franjas a los costados. */
+.pp-foto { margin: 0; display: grid; justify-items: center; gap: 6px; }
+.pp-foto__img { display: block; max-width: 100%; max-height: 340px; width: auto; height: auto; border-radius: var(--r-md); }
+.pp-foto__fuente { font-size: 13px; color: var(--muted); text-align: right; }
+.pp-foto__fuente a { color: inherit; text-underline-offset: 2px; }
+.pp-back { display: inline-flex; align-items: center; gap: 4px; justify-self: start; margin: -8px 0 0; }
+
+.pp-finder { display: grid; gap: 6px; }
+.pp-finder__label { font-size: 15px; font-weight: 600; color: var(--ink-2); }
+
+.pp-results__title { margin-bottom: 10px; }
+
+.pp-foot { font-size: 14px; color: var(--muted); display: grid; gap: 2px; padding-top: 4px; }

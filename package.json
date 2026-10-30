@@ -33,7 +33,9 @@
     "electron": "electron .",
     "dist": "electron-builder --win portable",
     "publish": "node scripts/publish.mjs",
-    "deploy:front": "node scripts/deploy-front.mjs"
+    "deploy:front": "node scripts/deploy-front.mjs",
+    "dev:precios": "vite --config vite.precios.config.js",
+    "deploy:precios": "node scripts/deploy-precios.mjs"
   },
   "dependencies": {
     "barcode-detector": "^3.2.2",

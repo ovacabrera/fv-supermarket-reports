@@ -13,7 +13,7 @@ export function normalizar(texto) {
 }
 
 // Última venta de cada artículo: { fecha, precio }.
-function ultimasVentas(db) {
+export function ultimasVentas(db) {
   const fecha = new Map();
   for (const o of db.orders) if (o.total <= MAX_ORDEN_RAZONABLE) fecha.set(o.id, o.saleDate);
   const ultima = new Map();

@@ -14,11 +14,16 @@
 // Seguridad: antes de subir datos verifica que <proyecto>.pages.dev responda con el login de
 // Cloudflare Access. Si la URL está abierta (o no se puede comprobar), NO publica.
 //
+// Después sube la lista de precios pública (snapshot/precios.json.gz) a OTRO KV, el del consultor
+// abierto a los clientes (sites/precios/wrangler.json). Si ese sitio no está armado, la saltea.
+//
 // Deja log en logs/publish.log y sale con código distinto de 0 si algo falla.
 
 import fs from "fs";
 import path from "path";
-import { ROOT, arg, has, log, fail, run, loadEnv, config, requireAccess } from "./lib/cloudflare.mjs";
+import zlib from "zlib";
+import { validarPreciosPublicos } from "../src/lib/preciosPublicos.js";
+import { ROOT, arg, has, log, fail, run, loadEnv, config, configPrecios, requireAccess } from "./lib/cloudflare.mjs";
 
 const OUT = path.join(ROOT, "snapshot");
 const dryRun = has("dry-run");
@@ -52,8 +57,8 @@ const token = process.env.CLOUDFLARE_API_TOKEN, account = process.env.CLOUDFLARE
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Con token: directo a la API de Cloudflare, con reintentos y la causa exacta en el log.
-async function putApi(key, body, ttl) {
-  const url = `https://api.cloudflare.com/client/v4/accounts/${account}/storage/kv/namespaces/${kvId}/values/${encodeURIComponent(key)}${ttl ? `?expiration_ttl=${ttl}` : ""}`;
+async function putApi(key, body, ttl, ns = kvId) {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${account}/storage/kv/namespaces/${ns}/values/${encodeURIComponent(key)}${ttl ? `?expiration_ttl=${ttl}` : ""}`;
   for (let intento = 1; ; intento++) {
     let error;
     try {
@@ -73,10 +78,10 @@ async function putApi(key, body, ttl) {
 }
 
 // Sin token (la Mac con `wrangler login`): con wrangler, desde un archivo temporal.
-function putWrangler(key, body, ttl) {
+function putWrangler(key, body, ttl, ns = kvId) {
   const tmp = path.join(OUT, "kv-parte.tmp");
   fs.writeFileSync(tmp, body);
-  run("npx", ["wrangler", "kv", "key", "put", key, "--path", path.relative(ROOT, tmp), "--namespace-id", kvId, "--remote", ...(ttl ? ["--ttl", String(ttl)] : [])]);
+  run("npx", ["wrangler", "kv", "key", "put", key, "--path", path.relative(ROOT, tmp), "--namespace-id", ns, "--remote", ...(ttl ? ["--ttl", String(ttl)] : [])]);
   fs.rmSync(tmp, { force: true });
 }
 
@@ -93,3 +98,18 @@ const t0 = Date.now();
 for (let i = 0; i < cantidad; i++) await put(prefijo + i, gz.subarray(i * PARTE, (i + 1) * PARTE), TTL_PARTES);
 await put("meta.json", JSON.stringify({ ...meta, partes: { prefijo, cantidad } }, null, 2));
 log(`✓ Datos publicados en ${((Date.now() - t0) / 1000).toFixed(0)} s (${prodUrl}data/)`);
+
+// 4. Lista de precios pública, a su propio KV. Se valida de nuevo justo antes de subir.
+const publico = configPrecios();
+const preciosFile = path.join(OUT, "precios.json.gz");
+if (!publico) {
+  log("Sin sitio público de precios (sites/precios/wrangler.json): no se sube la lista");
+} else if (!fs.existsSync(preciosFile)) {
+  fail("No se generó snapshot/precios.json.gz (ver el aviso de export-snapshot): no se sube la lista de precios");
+} else {
+  const preciosGz = fs.readFileSync(preciosFile);
+  const errores = validarPreciosPublicos(zlib.gunzipSync(preciosGz).toString("utf8"));
+  if (errores.length) fail(`Lista de precios pública rechazada: ${errores.join("; ")}`);
+  await put("precios.json.gz", preciosGz, undefined, publico.kvId);
+  log(`✓ Lista de precios publicada (${(preciosGz.length / 1024).toFixed(0)} KB) para ${publico.url}`);
+}
